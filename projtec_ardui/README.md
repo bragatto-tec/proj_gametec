@@ -31,3 +31,15 @@ Useful Gradle tasks and flags:
 
 Note that most tasks that are not specific to a single project can be run with `name:` prefix, where the `name` should be replaced with the ID of a specific project.
 For example, `core:clean` removes `build` folder only from the `core` project.
+
+## 📊 Acompanhamento do Projeto
+
+O desenvolvimento do projeto é acompanhado através do [GitHub Projects](https://github.com/bragatto-tec/proj_gametec/projects). O gerenciamento visual, as milestones, as issues e as tarefas são mantidos no GitHub Projects oficial.
+
+- 🎮 Gameplay
+- 🔌 Integração IoT
+- 🦵 Reabilitação do tornozelo
+- 📊 Métricas e pontuação
+- 🧪 Testes e documentação
+
+**Project:** [Projeto Tec — Reabilitação do Tornozelo](https://github.com/bragatto-tec/proj_gametec/projects)
