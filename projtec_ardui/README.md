@@ -43,3 +43,16 @@ O desenvolvimento do projeto é acompanhado através do [GitHub Projects](https:
 - 🧪 Testes e documentação
 
 **Project:** [Projeto Tec — Reabilitação do Tornozelo](https://github.com/bragatto-tec/proj_gametec/projects)
+
+## Conexão com o sensor
+
+Sem endereço configurado, o aplicativo procura o ESP32 em `192.168.4.1`, `rehabcar.local` e `esp32.local`. Como o firmware imprime no Serial Monitor o IP recebido pelo Wi-Fi, informar esse IP é o método mais confiável. Computador e placa precisam estar na mesma rede Wi-Fi:
+
+```powershell
+$env:SENSOR_BASE_URL = "http://192.168.1.50"
+.\gradlew.bat lwjgl3:run
+```
+
+Também são aceitos o argumento `--sensor-url=http://192.168.1.50` e a propriedade Java `sensor.baseUrl`. Na tela `TelaCalibracao`, erros de conexão e respostas incompatíveis da API do ESP32 são exibidos junto ao progresso.
+
+A API do ESP32 deve fornecer `GET /api/dados` como JSON com `angX`, `angY`, `temp` e `ok`; iniciar a calibração por `GET /api/calibrar` com resposta `OK`; e responder a `GET /api/progresso` como JSON com `progresso` numérico de 0 a 100. O app consulta leituras quatro vezes por segundo para reduzir a carga no servidor HTTP do ESP32 e tenta novamente falhas temporárias de progresso antes de encerrar a calibração.

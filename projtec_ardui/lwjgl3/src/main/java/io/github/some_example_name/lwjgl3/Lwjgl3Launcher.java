@@ -4,15 +4,103 @@ import com.badlogic.gdx.backends.lwjgl3.Lwjgl3Application;
 import com.badlogic.gdx.backends.lwjgl3.Lwjgl3ApplicationConfiguration;
 import io.github.some_example_name.Main;
 
+import javax.swing.JOptionPane;
+import java.awt.GraphicsEnvironment;
+import java.net.URI;
+
 /** Launches the desktop (LWJGL3) application. */
 public class Lwjgl3Launcher {
     public static void main(String[] args) {
         if (StartupHelper.startNewJvmIfRequired()) return; // This handles macOS support and helps on Windows.
-        createApplication();
+        createApplication(obterEnderecoSensor(args));
     }
 
-    private static Lwjgl3Application createApplication() {
-        return new Lwjgl3Application(new Main(), getDefaultConfiguration());
+    private static Lwjgl3Application createApplication(String sensorBaseUrl) {
+        return new Lwjgl3Application(new Main(sensorBaseUrl), getDefaultConfiguration());
+    }
+
+    /**
+     * Endereço opcional do ESP32. Ordem: --sensor-url=..., -Dsensor.baseUrl, SENSOR_BASE_URL.
+     * Se nada for informado devolve null e o SensorClient descobre sozinho
+     * (Wi-Fi "RehabCar" em 192.168.4.1, rehabcar.local, esp32.local).
+     */
+    private static String obterEnderecoSensor(String[] args) {
+        String endereco = null;
+        for (String arg : args) {
+            if (arg.startsWith("--sensor-url=")) {
+                endereco = arg.substring("--sensor-url=".length());
+                break;
+            }
+        }
+        if (endereco == null || endereco.trim().isEmpty()) {
+            endereco = System.getProperty("sensor.baseUrl");
+        }
+        if (endereco == null || endereco.trim().isEmpty()) {
+            endereco = System.getenv("SENSOR_BASE_URL");
+        }
+        if (endereco == null || endereco.trim().isEmpty()) {
+            endereco = solicitarEnderecoSensor();
+        }
+        if (endereco == null || endereco.trim().isEmpty()) {
+            return null;
+        }
+        try {
+            return normalizarEndereco(endereco.trim());
+        } catch (IllegalArgumentException e) {
+            System.err.println(e.getMessage() + " - usando descoberta automatica.");
+            return null;
+        }
+    }
+
+    private static String solicitarEnderecoSensor() {
+        if (GraphicsEnvironment.isHeadless()) {
+            return null;
+        }
+        while (true) {
+            Object informado = JOptionPane.showInputDialog(
+                    null,
+                    "Digite o IP mostrado no Serial Monitor do ESP32.\n"
+                            + "Deixe vazio ou cancele para tentar a busca automatica.",
+                    "Conectar ao sensor",
+                    JOptionPane.QUESTION_MESSAGE,
+                    null,
+                    null,
+                    ""
+            );
+            if (informado == null || informado.toString().trim().isEmpty()) {
+                return null;
+            }
+            try {
+                return normalizarEndereco(informado.toString().trim());
+            } catch (IllegalArgumentException e) {
+                JOptionPane.showMessageDialog(
+                        null,
+                        "Endereco invalido. Informe um IP, por exemplo: 192.168.1.50",
+                        "Endereco invalido",
+                        JOptionPane.ERROR_MESSAGE
+                );
+            }
+        }
+    }
+
+    private static String normalizarEndereco(String endereco) {
+        if (!endereco.contains("://")) {
+            endereco = "http://" + endereco;
+        }
+        URI uri;
+        try {
+            uri = URI.create(endereco);
+        } catch (IllegalArgumentException e) {
+            throw new IllegalArgumentException("Endereço do sensor inválido: " + endereco);
+        }
+        if (!("http".equalsIgnoreCase(uri.getScheme()) || "https".equalsIgnoreCase(uri.getScheme()))
+            || uri.getHost() == null) {
+            throw new IllegalArgumentException("Endereço do sensor inválido: " + endereco);
+        }
+        String normalizado = uri.toString();
+        return normalizado.endsWith("/")
+            ? normalizado.substring(0, normalizado.length() - 1)
+            : normalizado;
     }
 
     private static Lwjgl3ApplicationConfiguration getDefaultConfiguration() {

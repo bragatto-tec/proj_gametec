@@ -2,6 +2,7 @@ package io.github.some_example_name;
 
 import com.badlogic.gdx.ApplicationListener;
 import com.badlogic.gdx.Gdx;
+import com.badlogic.gdx.Input;
 import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.g2d.BitmapFont;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
@@ -11,16 +12,37 @@ import com.badlogic.gdx.utils.ScreenUtils;
 import com.badlogic.gdx.utils.viewport.FitViewport;
 
 public class Main implements ApplicationListener {
-    SpriteBatch spriteBatch;
-    FitViewport viewport;
-    BitmapFont font;
-    Texture buttonTexture;
-    Vector2 touchPos;
+    private final String sensorBaseUrl;
 
-    Button botaoJogar;
-    Button botaoCalibrar;
-    Button botaoConfig;
-    Button botaoSair;
+    private enum Estado {
+        MENU,
+        CALIBRANDO,
+        JOGANDO,
+        FIM
+    }
+
+    private SpriteBatch spriteBatch;
+    private FitViewport viewport;
+    private BitmapFont font;
+    private Texture buttonTexture;
+    private Vector2 touchPos;
+
+    private SensorClient sensorClient;
+    private TelaCalibracao telaCalibracao;
+    private Estado estadoAtual;
+
+    private Button botaoJogar;
+    private Button botaoCalibrar;
+    private Button botaoConfig;
+    private Button botaoSair;
+
+    public Main() {
+        this(null);
+    }
+
+    public Main(String sensorBaseUrl) {
+        this.sensorBaseUrl = sensorBaseUrl;
+    }
 
     @Override
     public void create() {
@@ -33,6 +55,9 @@ public class Main implements ApplicationListener {
 
         buttonTexture = new Texture("button.png");
         touchPos = new Vector2();
+        sensorClient = sensorBaseUrl == null ? new SensorClient() : new SensorClient(sensorBaseUrl);
+        telaCalibracao = new TelaCalibracao(viewport, font, buttonTexture, sensorClient);
+        estadoAtual = Estado.MENU;
 
         botaoJogar = new Button(buttonTexture, font, "Jogar", 2.5f, 3.0f, 3, 0.7f);
         botaoCalibrar = new Button(buttonTexture, font, "Calibrar sensor", 2.5f, 2.1f, 3, 0.7f);
@@ -53,15 +78,26 @@ public class Main implements ApplicationListener {
     }
 
     private void input() {
+        if (estadoAtual == Estado.CALIBRANDO) {
+            if (telaCalibracao.input()) {
+                estadoAtual = Estado.MENU;
+                telaCalibracao.fechar();
+            }
+            return;
+        }
+
         if (Gdx.input.justTouched()) {
             touchPos.set(Gdx.input.getX(), Gdx.input.getY());
             viewport.unproject(touchPos);
 
             if (botaoJogar.foiClicado(touchPos.x, touchPos.y)) {
                 Gdx.app.log("RehabCar", "Jogar");
+                estadoAtual = Estado.JOGANDO;
             }
             if (botaoCalibrar.foiClicado(touchPos.x, touchPos.y)) {
                 Gdx.app.log("RehabCar", "Calibrar sensor");
+                telaCalibracao.abrir();
+                estadoAtual = Estado.CALIBRANDO;
             }
             if (botaoConfig.foiClicado(touchPos.x, touchPos.y)) {
                 Gdx.app.log("RehabCar", "Configuracoes");
@@ -70,15 +106,33 @@ public class Main implements ApplicationListener {
                 Gdx.app.exit();
             }
         }
+
+        if (Gdx.input.isKeyJustPressed(Input.Keys.ESCAPE) && estadoAtual == Estado.MENU) {
+            Gdx.app.exit();
+        }
     }
 
     private void logic() {
+        sensorClient.update(Gdx.graphics.getDeltaTime());
+
+        if (estadoAtual == Estado.CALIBRANDO) {
+            telaCalibracao.update(Gdx.graphics.getDeltaTime());
+            if (telaCalibracao.isVoltarSolicitado()) {
+                estadoAtual = Estado.MENU;
+                telaCalibracao.fechar();
+            }
+        }
     }
 
     private void draw() {
         ScreenUtils.clear(0.1f, 0.1f, 0.15f, 1f);
         viewport.apply();
         spriteBatch.setProjectionMatrix(viewport.getCamera().combined);
+
+        if (estadoAtual == Estado.CALIBRANDO) {
+            telaCalibracao.draw(spriteBatch);
+            return;
+        }
 
         spriteBatch.begin();
         font.draw(spriteBatch, "RehabCar", 0, 4.8f, viewport.getWorldWidth(), Align.center, false);
@@ -99,6 +153,8 @@ public class Main implements ApplicationListener {
 
     @Override
     public void dispose() {
+        sensorClient.parar();
+        telaCalibracao.dispose();
         spriteBatch.dispose();
         font.dispose();
         buttonTexture.dispose();

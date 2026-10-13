@@ -1,5 +1,6 @@
 package io.github.some_example_name;
 
+import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.g2d.BitmapFont;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
@@ -9,11 +10,14 @@ public class Button extends GameObject {
 
     private String text;
     private BitmapFont font;
+    private boolean habilitado;
 
     public Button(Texture texture, BitmapFont font, String text, float x, float y, float width, float height) {
         super(texture, x, y, width, height);
         this.font = font;
         this.text = text;
+        this.habilitado = true;
+        sprite.setColor(Color.WHITE);
     }
 
     @Override
@@ -27,6 +31,15 @@ public class Button extends GameObject {
     }
 
     public boolean foiClicado(float x, float y) {
-        return getBounds().contains(x, y);
+        return habilitado && getBounds().contains(x, y);
+    }
+
+    public boolean isHabilitado() {
+        return habilitado;
+    }
+
+    public void setHabilitado(boolean habilitado) {
+        this.habilitado = habilitado;
+        sprite.setColor(habilitado ? Color.WHITE : Color.GRAY);
     }
 }
