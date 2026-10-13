@@ -44,6 +44,10 @@ O desenvolvimento do projeto é acompanhado através do [GitHub Projects](https:
 
 **Project:** [Projeto Tec — Reabilitação do Tornozelo](https://github.com/bragatto-tec/proj_gametec/projects)
 
+## 📅 Cronograma
+
+Consulte o [cronograma do projeto](../CRONOGRAMA.md), com as etapas, prazos e status estimados.
+
 ## Conexão com o sensor
 
 Sem endereço configurado, o aplicativo procura o ESP32 em `192.168.4.1`, `rehabcar.local` e `esp32.local`. Como o firmware imprime no Serial Monitor o IP recebido pelo Wi-Fi, informar esse IP é o método mais confiável. Computador e placa precisam estar na mesma rede Wi-Fi:
