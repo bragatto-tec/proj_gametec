@@ -17,6 +17,7 @@ public class Main implements ApplicationListener {
     private enum Estado {
         MENU,
         CALIBRANDO,
+        SELECAO_MODO,
         JOGANDO,
         FIM
     }
@@ -29,6 +30,7 @@ public class Main implements ApplicationListener {
 
     private SensorClient sensorClient;
     private TelaCalibracao telaCalibracao;
+    private TelaSelecaoModo telaSelecaoModo;
     private Estado estadoAtual;
 
     private Button botaoJogar;
@@ -57,6 +59,7 @@ public class Main implements ApplicationListener {
         touchPos = new Vector2();
         sensorClient = sensorBaseUrl == null ? new SensorClient() : new SensorClient(sensorBaseUrl);
         telaCalibracao = new TelaCalibracao(viewport, font, buttonTexture, sensorClient);
+        telaSelecaoModo = new TelaSelecaoModo(viewport, font, buttonTexture);
         estadoAtual = Estado.MENU;
 
         botaoJogar = new Button(buttonTexture, font, "Jogar", 2.5f, 3.0f, 3, 0.7f);
@@ -86,13 +89,27 @@ public class Main implements ApplicationListener {
             return;
         }
 
+        if (estadoAtual == Estado.SELECAO_MODO) {
+            telaSelecaoModo.input();
+            if (telaSelecaoModo.isVoltarSolicitado()) {
+                estadoAtual = Estado.MENU;
+                telaSelecaoModo.fechar();
+            } else if (telaSelecaoModo.isSelecionarSolicitado()) {
+                Gdx.app.log("RehabCar", "Modo escolhido: " + telaSelecaoModo.getNomeModo());
+                estadoAtual = Estado.MENU;
+                telaSelecaoModo.fechar();
+            }
+            return;
+        }
+
         if (Gdx.input.justTouched()) {
             touchPos.set(Gdx.input.getX(), Gdx.input.getY());
             viewport.unproject(touchPos);
 
             if (botaoJogar.foiClicado(touchPos.x, touchPos.y)) {
                 Gdx.app.log("RehabCar", "Jogar");
-                estadoAtual = Estado.JOGANDO;
+                telaSelecaoModo.abrir();
+                estadoAtual = Estado.SELECAO_MODO;
             }
             if (botaoCalibrar.foiClicado(touchPos.x, touchPos.y)) {
                 Gdx.app.log("RehabCar", "Calibrar sensor");
@@ -131,6 +148,11 @@ public class Main implements ApplicationListener {
 
         if (estadoAtual == Estado.CALIBRANDO) {
             telaCalibracao.draw(spriteBatch);
+            return;
+        }
+
+        if (estadoAtual == Estado.SELECAO_MODO) {
+            telaSelecaoModo.draw(spriteBatch);
             return;
         }
 
