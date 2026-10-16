@@ -230,8 +230,10 @@ public class SensorClient {
             sensorPronto = false;
             return;
         }
-        angX = -leituraY;
-        angY = leituraX;
+        // O firmware já publica angX e angY nos eixos finais (incluindo o sinal
+        // desejado para cada eixo). Não inverter nem trocar os eixos aqui.
+        angX = leituraX;
+        angY = leituraY;
         if (dados.has("temp")) {
             Float t = extrairNumero(dados, "temp");
             if (t != null) temp = t;

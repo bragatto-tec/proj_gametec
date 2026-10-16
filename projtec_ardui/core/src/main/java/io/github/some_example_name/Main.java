@@ -6,6 +6,7 @@ import com.badlogic.gdx.Input;
 import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.g2d.BitmapFont;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
+import com.badlogic.gdx.graphics.g2d.TextureRegion;
 import com.badlogic.gdx.math.Vector2;
 import com.badlogic.gdx.utils.Align;
 import com.badlogic.gdx.utils.ScreenUtils;
@@ -26,7 +27,11 @@ public class Main implements ApplicationListener {
     private FitViewport viewport;
     private BitmapFont font;
     private Texture buttonTexture;
+    private Texture carroTexture;
+    private TextureRegion carroSprite;
     private Vector2 touchPos;
+    private Rua rua;
+    private float carroX;
 
     private SensorClient sensorClient;
     private TelaCalibracao telaCalibracao;
@@ -56,7 +61,15 @@ public class Main implements ApplicationListener {
         font.getData().setScale(0.02f);
 
         buttonTexture = new Texture("button.png");
+        carroTexture = new Texture("carros/car_hatch_sem-placa_e63946_4x5.png");
+        int larguraQuadro = carroTexture.getWidth() / 4;
+        int alturaQuadro = carroTexture.getHeight() / 5;
+        carroSprite = new TextureRegion(carroTexture, 0,
+                carroTexture.getHeight() - alturaQuadro, larguraQuadro, alturaQuadro);
         touchPos = new Vector2();
+        rua = new Rua(0, 0, viewport.getWorldWidth(), viewport.getWorldHeight(), 24f);
+        carroX = viewport.getWorldWidth() / 2f;
+
         sensorClient = sensorBaseUrl == null ? new SensorClient() : new SensorClient(sensorBaseUrl);
         telaCalibracao = new TelaCalibracao(viewport, font, buttonTexture, sensorClient);
         telaSelecaoModo = new TelaSelecaoModo(viewport, font, buttonTexture);
@@ -96,8 +109,18 @@ public class Main implements ApplicationListener {
                 telaSelecaoModo.fechar();
             } else if (telaSelecaoModo.isSelecionarSolicitado()) {
                 Gdx.app.log("RehabCar", "Modo escolhido: " + telaSelecaoModo.getNomeModo());
-                estadoAtual = Estado.MENU;
+                carroX = viewport.getWorldWidth() / 2f;
+                rua.dispose();
+                rua = new Rua(0, 0, viewport.getWorldWidth(), viewport.getWorldHeight(), 24f);
+                estadoAtual = Estado.JOGANDO;
                 telaSelecaoModo.fechar();
+            }
+            return;
+        }
+
+        if (estadoAtual == Estado.JOGANDO) {
+            if (Gdx.input.isKeyJustPressed(Input.Keys.ESCAPE)) {
+                estadoAtual = Estado.MENU;
             }
             return;
         }
@@ -110,6 +133,7 @@ public class Main implements ApplicationListener {
                 Gdx.app.log("RehabCar", "Jogar");
                 telaSelecaoModo.abrir();
                 estadoAtual = Estado.SELECAO_MODO;
+                return;
             }
             if (botaoCalibrar.foiClicado(touchPos.x, touchPos.y)) {
                 Gdx.app.log("RehabCar", "Calibrar sensor");
@@ -131,6 +155,16 @@ public class Main implements ApplicationListener {
 
     private void logic() {
         sensorClient.update(Gdx.graphics.getDeltaTime());
+
+        if (estadoAtual == Estado.JOGANDO) {
+            float dt = Gdx.graphics.getDeltaTime();
+            rua.update(dt);
+            if (sensorClient.sensorPronto()) {
+                float alvoX = viewport.getWorldWidth() / 2f
+                        + Math.max(-30f, Math.min(30f, sensorClient.getAngX())) / 30f * 2.7f;
+                carroX += (alvoX - carroX) * Math.min(1f, dt * 8f);
+            }
+        }
 
         if (estadoAtual == Estado.CALIBRANDO) {
             telaCalibracao.update(Gdx.graphics.getDeltaTime());
@@ -156,6 +190,19 @@ public class Main implements ApplicationListener {
             return;
         }
 
+        if (estadoAtual == Estado.JOGANDO) {
+            spriteBatch.begin();
+            rua.draw(spriteBatch);
+            float carroLargura = 0.72f;
+            float carroAltura = carroLargura * carroSprite.getRegionHeight() / carroSprite.getRegionWidth();
+            spriteBatch.draw(carroSprite, carroX - carroLargura / 2f, 0.35f,
+                    carroLargura, carroAltura);
+            font.draw(spriteBatch, sensorClient.sensorPronto() ? "MPU6050 conectado" : "Aguardando MPU6050",
+                    0.15f, viewport.getWorldHeight() - 0.15f);
+            spriteBatch.end();
+            return;
+        }
+
         spriteBatch.begin();
         font.draw(spriteBatch, "RehabCar", 0, 4.8f, viewport.getWorldWidth(), Align.center, false);
         botaoJogar.draw(spriteBatch);
@@ -177,8 +224,10 @@ public class Main implements ApplicationListener {
     public void dispose() {
         sensorClient.parar();
         telaCalibracao.dispose();
+        rua.dispose();
         spriteBatch.dispose();
         font.dispose();
         buttonTexture.dispose();
+        carroTexture.dispose();
     }
 }
