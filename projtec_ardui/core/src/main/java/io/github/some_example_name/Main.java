@@ -20,6 +20,7 @@ public class Main implements ApplicationListener {
         CALIBRANDO,
         SELECAO_MODO,
         PREPARACAO,
+        PAUSA,
         JOGANDO,
         FIM
     }
@@ -38,6 +39,8 @@ public class Main implements ApplicationListener {
     private TelaCalibracao telaCalibracao;
     private TelaSelecaoModo telaSelecaoModo;
     private TelaPreparacao telaPreparacao;
+    private TelaPausa telaPausa;
+    private boolean recalibrandoDaPausa;
     private Estado estadoAtual;
 
     private Button botaoJogar;
@@ -76,6 +79,7 @@ public class Main implements ApplicationListener {
         telaCalibracao = new TelaCalibracao(viewport, font, buttonTexture, sensorClient);
         telaSelecaoModo = new TelaSelecaoModo(viewport, font, buttonTexture);
         telaPreparacao = new TelaPreparacao(viewport, font, buttonTexture, sensorClient);
+        telaPausa = new TelaPausa(viewport, font, buttonTexture);
         estadoAtual = Estado.MENU;
 
         botaoJogar = new Button(buttonTexture, font, "Jogar", 2.5f, 3.0f, 3, 0.7f);
@@ -99,8 +103,7 @@ public class Main implements ApplicationListener {
     private void input() {
         if (estadoAtual == Estado.CALIBRANDO) {
             if (telaCalibracao.input()) {
-                estadoAtual = Estado.MENU;
-                telaCalibracao.fechar();
+                sairDaCalibracao();
             }
             return;
         }
@@ -130,8 +133,31 @@ public class Main implements ApplicationListener {
         }
 
         if (estadoAtual == Estado.JOGANDO) {
-            if (Gdx.input.isKeyJustPressed(Input.Keys.ESCAPE)) {
+            if (Gdx.input.isKeyJustPressed(Input.Keys.ESCAPE) || Gdx.input.isKeyJustPressed(Input.Keys.P)) {
+                telaPausa.abrir();
+                estadoAtual = Estado.PAUSA;
+            }
+            return;
+        }
+
+        if (estadoAtual == Estado.PAUSA) {
+            telaPausa.input();
+            if (telaPausa.isContinuarSolicitado()) {
+                estadoAtual = Estado.JOGANDO;
+                telaPausa.fechar();
+            } else if (telaPausa.isReiniciarSolicitado()) {
+                carroX = viewport.getWorldWidth() / 2f;
+                rua.reiniciar();
+                estadoAtual = Estado.JOGANDO;
+                telaPausa.fechar();
+            } else if (telaPausa.isRecalibrarSolicitado()) {
+                recalibrandoDaPausa = true;
+                telaCalibracao.abrir();
+                estadoAtual = Estado.CALIBRANDO;
+                telaPausa.fechar();
+            } else if (telaPausa.isMenuSolicitado()) {
                 estadoAtual = Estado.MENU;
+                telaPausa.fechar();
             }
             return;
         }
@@ -164,6 +190,17 @@ public class Main implements ApplicationListener {
         }
     }
 
+    private void sairDaCalibracao() {
+        telaCalibracao.fechar();
+        if (recalibrandoDaPausa) {
+            recalibrandoDaPausa = false;
+            telaPausa.abrir();
+            estadoAtual = Estado.PAUSA;
+        } else {
+            estadoAtual = Estado.MENU;
+        }
+    }
+
     private void logic() {
         sensorClient.update(Gdx.graphics.getDeltaTime());
 
@@ -190,8 +227,7 @@ public class Main implements ApplicationListener {
         if (estadoAtual == Estado.CALIBRANDO) {
             telaCalibracao.update(Gdx.graphics.getDeltaTime());
             if (telaCalibracao.isVoltarSolicitado()) {
-                estadoAtual = Estado.MENU;
-                telaCalibracao.fechar();
+                sairDaCalibracao();
             }
         }
     }
@@ -216,7 +252,7 @@ public class Main implements ApplicationListener {
             return;
         }
 
-        if (estadoAtual == Estado.JOGANDO) {
+        if (estadoAtual == Estado.JOGANDO || estadoAtual == Estado.PAUSA) {
             spriteBatch.begin();
             rua.draw(spriteBatch);
             float carroLargura = 0.72f;
@@ -226,6 +262,9 @@ public class Main implements ApplicationListener {
             font.draw(spriteBatch, sensorClient.sensorPronto() ? "MPU6050 conectado" : "Aguardando MPU6050",
                     0.15f, viewport.getWorldHeight() - 0.15f);
             spriteBatch.end();
+            if (estadoAtual == Estado.PAUSA) {
+                telaPausa.draw(spriteBatch);
+            }
             return;
         }
 
