@@ -19,6 +19,7 @@ public class Main implements ApplicationListener {
         MENU,
         CALIBRANDO,
         SELECAO_MODO,
+        PREPARACAO,
         JOGANDO,
         FIM
     }
@@ -36,6 +37,7 @@ public class Main implements ApplicationListener {
     private SensorClient sensorClient;
     private TelaCalibracao telaCalibracao;
     private TelaSelecaoModo telaSelecaoModo;
+    private TelaPreparacao telaPreparacao;
     private Estado estadoAtual;
 
     private Button botaoJogar;
@@ -73,6 +75,7 @@ public class Main implements ApplicationListener {
         sensorClient = sensorBaseUrl == null ? new SensorClient() : new SensorClient(sensorBaseUrl);
         telaCalibracao = new TelaCalibracao(viewport, font, buttonTexture, sensorClient);
         telaSelecaoModo = new TelaSelecaoModo(viewport, font, buttonTexture);
+        telaPreparacao = new TelaPreparacao(viewport, font, buttonTexture, sensorClient);
         estadoAtual = Estado.MENU;
 
         botaoJogar = new Button(buttonTexture, font, "Jogar", 2.5f, 3.0f, 3, 0.7f);
@@ -109,11 +112,19 @@ public class Main implements ApplicationListener {
                 telaSelecaoModo.fechar();
             } else if (telaSelecaoModo.isSelecionarSolicitado()) {
                 Gdx.app.log("RehabCar", "Modo escolhido: " + telaSelecaoModo.getNomeModo());
-                carroX = viewport.getWorldWidth() / 2f;
-                rua.dispose();
-                rua = new Rua(0, 0, viewport.getWorldWidth(), viewport.getWorldHeight(), 24f);
-                estadoAtual = Estado.JOGANDO;
+                telaPreparacao.abrir(telaSelecaoModo.getModoEscolhido(), telaSelecaoModo.getNomeModo());
+                estadoAtual = Estado.PREPARACAO;
                 telaSelecaoModo.fechar();
+            }
+            return;
+        }
+
+        if (estadoAtual == Estado.PREPARACAO) {
+            telaPreparacao.input();
+            if (telaPreparacao.isVoltarSolicitado()) {
+                telaSelecaoModo.abrir();
+                estadoAtual = Estado.SELECAO_MODO;
+                telaPreparacao.fechar();
             }
             return;
         }
@@ -166,6 +177,16 @@ public class Main implements ApplicationListener {
             }
         }
 
+        if (estadoAtual == Estado.PREPARACAO) {
+            telaPreparacao.update(Gdx.graphics.getDeltaTime());
+            if (telaPreparacao.isIniciarSolicitado()) {
+                carroX = viewport.getWorldWidth() / 2f;
+                rua.reiniciar();
+                estadoAtual = Estado.JOGANDO;
+                telaPreparacao.fechar();
+            }
+        }
+
         if (estadoAtual == Estado.CALIBRANDO) {
             telaCalibracao.update(Gdx.graphics.getDeltaTime());
             if (telaCalibracao.isVoltarSolicitado()) {
@@ -187,6 +208,11 @@ public class Main implements ApplicationListener {
 
         if (estadoAtual == Estado.SELECAO_MODO) {
             telaSelecaoModo.draw(spriteBatch);
+            return;
+        }
+
+        if (estadoAtual == Estado.PREPARACAO) {
+            telaPreparacao.draw(spriteBatch);
             return;
         }
 
