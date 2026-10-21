@@ -25,6 +25,13 @@ public class Main implements ApplicationListener {
         FIM
     }
 
+    // Carro e controle por vias
+    private static final float CARRO_LARGURA = 0.72f;
+    private static final float CARRO_Y = 0.35f;
+    private static final float INCLINACAO_MAX = 30f;      // graus que o sensor considera "maximo"
+    private static final float LIMIAR_TROCA = 0.35f;      // fracao da inclinacao para sair do centro
+    private static final float LIMIAR_VOLTA = 0.20f;      // fracao para voltar ao centro (histerese)
+
     private SpriteBatch spriteBatch;
     private FitViewport viewport;
     private BitmapFont font;
@@ -33,7 +40,9 @@ public class Main implements ApplicationListener {
     private TextureRegion carroSprite;
     private Vector2 touchPos;
     private Rua rua;
+    private GerenciadorPista pista;
     private float carroX;
+    private int viaAtual = GerenciadorPista.VIA_CENTRO;
 
     private SensorClient sensorClient;
     private TelaCalibracao telaCalibracao;
@@ -73,7 +82,8 @@ public class Main implements ApplicationListener {
                 carroTexture.getHeight() - alturaQuadro, larguraQuadro, alturaQuadro);
         touchPos = new Vector2();
         rua = new Rua(0, 0, viewport.getWorldWidth(), viewport.getWorldHeight(), 24f);
-        carroX = viewport.getWorldWidth() / 2f;
+        pista = new GerenciadorPista();
+        carroX = GerenciadorPista.xDaVia(viaAtual, 1f);
 
         sensorClient = sensorBaseUrl == null ? new SensorClient() : new SensorClient(sensorBaseUrl);
         telaCalibracao = new TelaCalibracao(viewport, font, buttonTexture, sensorClient);
@@ -136,6 +146,14 @@ public class Main implements ApplicationListener {
             if (Gdx.input.isKeyJustPressed(Input.Keys.ESCAPE) || Gdx.input.isKeyJustPressed(Input.Keys.P)) {
                 telaPausa.abrir();
                 estadoAtual = Estado.PAUSA;
+            } else if (!sensorClient.sensorPronto()) {
+                // sem MPU6050: troca de via pelo teclado (setas ou A/D)
+                if (Gdx.input.isKeyJustPressed(Input.Keys.LEFT) || Gdx.input.isKeyJustPressed(Input.Keys.A)) {
+                    viaAtual = Math.max(GerenciadorPista.VIA_ESQUERDA, viaAtual - 1);
+                }
+                if (Gdx.input.isKeyJustPressed(Input.Keys.RIGHT) || Gdx.input.isKeyJustPressed(Input.Keys.D)) {
+                    viaAtual = Math.min(GerenciadorPista.VIA_DIREITA, viaAtual + 1);
+                }
             }
             return;
         }
@@ -146,8 +164,7 @@ public class Main implements ApplicationListener {
                 estadoAtual = Estado.JOGANDO;
                 telaPausa.fechar();
             } else if (telaPausa.isReiniciarSolicitado()) {
-                carroX = viewport.getWorldWidth() / 2f;
-                rua.reiniciar();
+                reiniciarPartida();
                 estadoAtual = Estado.JOGANDO;
                 telaPausa.fechar();
             } else if (telaPausa.isRecalibrarSolicitado()) {
@@ -190,6 +207,36 @@ public class Main implements ApplicationListener {
         }
     }
 
+    private float alturaDoCarro() {
+        return CARRO_LARGURA * carroSprite.getRegionHeight() / carroSprite.getRegionWidth();
+    }
+
+    private void reiniciarPartida() {
+        viaAtual = GerenciadorPista.VIA_CENTRO;
+        carroX = GerenciadorPista.xDaVia(viaAtual, 1f);
+        rua.reiniciar();
+        pista.reiniciar();
+    }
+
+    /**
+     * Converte a inclinacao do sensor (graus, negativo = esquerda) em uma via.
+     * Usa histerese: precisa inclinar mais para sair do centro do que para voltar,
+     * assim o carro nao fica "tremendo" entre vias quando o angulo oscila perto do limite.
+     */
+    private int viaPelaInclinacao(int via, float angX) {
+        float n = Math.max(-INCLINACAO_MAX, Math.min(INCLINACAO_MAX, angX)) / INCLINACAO_MAX;
+        if (via == GerenciadorPista.VIA_ESQUERDA && n > -LIMIAR_VOLTA) {
+            via = GerenciadorPista.VIA_CENTRO;
+        } else if (via == GerenciadorPista.VIA_DIREITA && n < LIMIAR_VOLTA) {
+            via = GerenciadorPista.VIA_CENTRO;
+        }
+        if (via == GerenciadorPista.VIA_CENTRO) {
+            if (n < -LIMIAR_TROCA) via = GerenciadorPista.VIA_ESQUERDA;
+            else if (n > LIMIAR_TROCA) via = GerenciadorPista.VIA_DIREITA;
+        }
+        return via;
+    }
+
     private void sairDaCalibracao() {
         telaCalibracao.fechar();
         if (recalibrandoDaPausa) {
@@ -208,17 +255,19 @@ public class Main implements ApplicationListener {
             float dt = Gdx.graphics.getDeltaTime();
             rua.update(dt);
             if (sensorClient.sensorPronto()) {
-                float alvoX = viewport.getWorldWidth() / 2f
-                        + Math.max(-30f, Math.min(30f, sensorClient.getAngX())) / 30f * 2.7f;
-                carroX += (alvoX - carroX) * Math.min(1f, dt * 8f);
+                viaAtual = viaPelaInclinacao(viaAtual, sensorClient.getAngX());
             }
+            // o carro desliza suavemente ate o centro da via escolhida
+            float alvoX = GerenciadorPista.xDaVia(viaAtual, 1f);
+            carroX += (alvoX - carroX) * Math.min(1f, dt * 8f);
+
+            pista.update(dt, carroX, CARRO_Y, CARRO_LARGURA, alturaDoCarro());
         }
 
         if (estadoAtual == Estado.PREPARACAO) {
             telaPreparacao.update(Gdx.graphics.getDeltaTime());
             if (telaPreparacao.isIniciarSolicitado()) {
-                carroX = viewport.getWorldWidth() / 2f;
-                rua.reiniciar();
+                reiniciarPartida();
                 estadoAtual = Estado.JOGANDO;
                 telaPreparacao.fechar();
             }
@@ -255,12 +304,13 @@ public class Main implements ApplicationListener {
         if (estadoAtual == Estado.JOGANDO || estadoAtual == Estado.PAUSA) {
             spriteBatch.begin();
             rua.draw(spriteBatch);
-            float carroLargura = 0.72f;
-            float carroAltura = carroLargura * carroSprite.getRegionHeight() / carroSprite.getRegionWidth();
-            spriteBatch.draw(carroSprite, carroX - carroLargura / 2f, 0.35f,
-                    carroLargura, carroAltura);
-            font.draw(spriteBatch, sensorClient.sensorPronto() ? "MPU6050 conectado" : "Aguardando MPU6050",
+            pista.draw(spriteBatch);
+            spriteBatch.draw(carroSprite, carroX - CARRO_LARGURA / 2f, CARRO_Y,
+                    CARRO_LARGURA, alturaDoCarro());
+            font.draw(spriteBatch, sensorClient.sensorPronto() ? "MPU6050 conectado" : "Aguardando MPU6050 (setas/A/D)",
                     0.15f, viewport.getWorldHeight() - 0.15f);
+            font.draw(spriteBatch, "Moedas: " + pista.getMoedas() + "   Batidas: " + pista.getBatidas(),
+                    0f, viewport.getWorldHeight() - 0.15f, viewport.getWorldWidth() - 0.15f, Align.right, false);
             spriteBatch.end();
             if (estadoAtual == Estado.PAUSA) {
                 telaPausa.draw(spriteBatch);
@@ -290,6 +340,7 @@ public class Main implements ApplicationListener {
         sensorClient.parar();
         telaCalibracao.dispose();
         rua.dispose();
+        pista.dispose();
         spriteBatch.dispose();
         font.dispose();
         buttonTexture.dispose();
