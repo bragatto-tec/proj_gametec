@@ -38,6 +38,8 @@ public class Main implements ApplicationListener {
     private Texture buttonTexture;
     private Texture carroTexture;
     private TextureRegion carroSprite;
+    private TextureRegion[][] quadrosCarro;
+    private float tempoAnimacaoCarro;
     private Vector2 touchPos;
     private Rua rua;
     private GerenciadorPista pista;
@@ -76,10 +78,11 @@ public class Main implements ApplicationListener {
 
         buttonTexture = new Texture("button.png");
         carroTexture = new Texture("carros/car_hatch_sem-placa_e63946_4x5.png");
-        int larguraQuadro = carroTexture.getWidth() / 4;
-        int alturaQuadro = carroTexture.getHeight() / 5;
-        carroSprite = new TextureRegion(carroTexture, 0,
-                carroTexture.getHeight() - alturaQuadro, larguraQuadro, alturaQuadro);
+        // A ultima linha da folha e o efeito de fogo, nao o carro normal.
+        // split() entrega as linhas na ordem visual, de cima para baixo.
+        quadrosCarro = TextureRegion.split(carroTexture,
+                carroTexture.getWidth() / 4, carroTexture.getHeight() / 5);
+        carroSprite = quadrosCarro[0][0];
         touchPos = new Vector2();
         rua = new Rua(0, 0, viewport.getWorldWidth(), viewport.getWorldHeight(), 24f);
         pista = new GerenciadorPista();
@@ -213,6 +216,8 @@ public class Main implements ApplicationListener {
 
     private void reiniciarPartida() {
         viaAtual = GerenciadorPista.VIA_CENTRO;
+        tempoAnimacaoCarro = 0f;
+        carroSprite = quadrosCarro[0][0];
         carroX = GerenciadorPista.xDaVia(viaAtual, 1f);
         rua.reiniciar();
         pista.reiniciar();
@@ -250,13 +255,20 @@ public class Main implements ApplicationListener {
 
     private void logic() {
         sensorClient.update(Gdx.graphics.getDeltaTime());
+        float dt = Gdx.graphics.getDeltaTime();
 
         if (estadoAtual == Estado.JOGANDO) {
-            float dt = Gdx.graphics.getDeltaTime();
+            tempoAnimacaoCarro += dt;
             rua.update(dt);
             if (sensorClient.sensorPronto()) {
                 viaAtual = viaPelaInclinacao(viaAtual, sensorClient.getAngX());
             }
+            // As tres primeiras linhas mostram o carro reto ou inclinado.
+            // Alternar as quatro colunas anima as rodas e a carroceria.
+            int linha = viaAtual < GerenciadorPista.VIA_CENTRO ? 1
+                    : viaAtual > GerenciadorPista.VIA_CENTRO ? 2 : 0;
+            int coluna = (int) (tempoAnimacaoCarro * 8f) % quadrosCarro[linha].length;
+            carroSprite = quadrosCarro[linha][coluna];
             // o carro desliza suavemente ate o centro da via escolhida
             float alvoX = GerenciadorPista.xDaVia(viaAtual, 1f);
             carroX += (alvoX - carroX) * Math.min(1f, dt * 8f);
