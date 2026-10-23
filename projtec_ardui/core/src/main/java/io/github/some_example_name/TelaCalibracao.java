@@ -109,7 +109,7 @@ public class TelaCalibracao {
         Color corConexao = sensorClient.conectado() ? Ui.VERDE : Ui.VERMELHO;
         Color corSensor = !sensorClient.conectado() ? Ui.VERMELHO : (sensorClient.sensorPronto() ? Ui.VERDE : Ui.AMARELO);
         desenharCartaoStatus(batch, 0.4f, "ESP32", sensorClient.conectado() ? "Conectado" : "Desconectado",
-                url.isEmpty() ? "Buscando endereço..." : url.replace("http://", ""), corConexao);
+                url.isEmpty() ? "Buscando USB / Wi-Fi..." : sensorClient.getEnderecoAmigavel(), corConexao);
         desenharCartaoStatus(batch, 4.1f, "MPU6050", sensorClient.sensorPronto() ? "Leitura OK" : "Sem leitura",
                 sensorClient.sensorPronto() ? "Sensor respondendo" : "Aguardando dados", corSensor);
 

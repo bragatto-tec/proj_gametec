@@ -7,6 +7,7 @@ import io.github.some_example_name.Main;
 import javax.swing.JOptionPane;
 import java.awt.GraphicsEnvironment;
 import java.net.URI;
+import java.util.Locale;
 
 /** Launches the desktop (LWJGL3) application. */
 public class Lwjgl3Launcher {
@@ -59,8 +60,8 @@ public class Lwjgl3Launcher {
         while (true) {
             Object informado = JOptionPane.showInputDialog(
                     null,
-                    "Digite o IP mostrado no Serial Monitor do ESP32.\n"
-                            + "Deixe vazio ou cancele para tentar a busca automatica.",
+                    "Digite o IP do ESP32 (Wi-Fi) ou a porta do cabo USB (ex.: COM5 ou /dev/ttyUSB0).\n"
+                            + "Deixe vazio ou cancele para a busca automatica (cabo USB e Wi-Fi).",
                     "Conectar ao sensor",
                     JOptionPane.QUESTION_MESSAGE,
                     null,
@@ -75,7 +76,7 @@ public class Lwjgl3Launcher {
             } catch (IllegalArgumentException e) {
                 JOptionPane.showMessageDialog(
                         null,
-                        "Endereco invalido. Informe um IP, por exemplo: 192.168.1.50",
+                        "Endereco invalido. Informe um IP (192.168.1.50) ou uma porta USB (COM5).",
                         "Endereco invalido",
                         JOptionPane.ERROR_MESSAGE
                 );
@@ -84,6 +85,16 @@ public class Lwjgl3Launcher {
     }
 
     private static String normalizarEndereco(String endereco) {
+        String minusculo = endereco.toLowerCase(Locale.ROOT);
+        if (minusculo.equals("serial") || minusculo.equals("usb") || minusculo.equals("cabo")) {
+            return "serial:auto";
+        }
+        if (minusculo.startsWith("serial:")) {
+            return endereco;                                  // o SensorClient interpreta a porta
+        }
+        if (minusculo.matches("com\\d+") || minusculo.startsWith("/dev/")) {
+            return "serial:" + endereco;
+        }
         if (!endereco.contains("://")) {
             endereco = "http://" + endereco;
         }

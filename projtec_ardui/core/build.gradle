@@ -3,6 +3,8 @@ eclipse.project.name = appName + '-core'
 
 dependencies {
   api "com.badlogicgames.gdx:gdx:$gdxVersion"
+  // Conexão por cabo USB (porta serial). Traz as libs nativas de Windows/Linux/macOS.
+  api "com.fazecast:jSerialComm:2.11.0"
 
   if(enableGraalNative == 'true') {
     implementation "io.github.berstanio:gdx-svmhelper-annotations:$graalHelperVersion"

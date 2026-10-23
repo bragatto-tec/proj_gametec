@@ -28,9 +28,10 @@ public class Main implements ApplicationListener {
     // Carro e controle por vias
     private static final float CARRO_LARGURA = 0.72f;
     private static final float CARRO_Y = 0.35f;
-    private static final float INCLINACAO_MAX = 30f;      // graus que o sensor considera "maximo"
-    private static final float LIMIAR_TROCA = 0.35f;      // fracao da inclinacao para sair do centro
-    private static final float LIMIAR_VOLTA = 0.20f;      // fracao para voltar ao centro (histerese)
+    private static final float ANGULO_ENTRADA_FAIXA = 5f;
+    private static final float ANGULO_SAIDA_FAIXA = 3f;
+    private static final float FILTRO_INCLINACAO_SEGUNDOS = 0.12f;
+    private static final float RESPOSTA_DIRECAO = 12f;
 
     private SpriteBatch spriteBatch;
     private FitViewport viewport;
@@ -45,6 +46,8 @@ public class Main implements ApplicationListener {
     private GerenciadorPista pista;
     private float carroX;
     private int viaAtual = GerenciadorPista.VIA_CENTRO;
+    private float inclinacaoFiltrada;
+    private boolean inclinacaoInicializada;
 
     private SensorClient sensorClient;
     private TelaCalibracao telaCalibracao;
@@ -223,6 +226,7 @@ public class Main implements ApplicationListener {
 
     private void reiniciarPartida() {
         viaAtual = GerenciadorPista.VIA_CENTRO;
+        inclinacaoInicializada = false;
         tempoAnimacaoCarro = 0f;
         carroSprite = quadrosCarro[0][0];
         carroX = GerenciadorPista.xDaVia(viaAtual, 1f);
@@ -230,23 +234,18 @@ public class Main implements ApplicationListener {
         pista.reiniciar();
     }
 
-    /**
-     * Converte a inclinacao do sensor (graus, negativo = esquerda) em uma via.
-     * Usa histerese: precisa inclinar mais para sair do centro do que para voltar,
-     * assim o carro nao fica "tremendo" entre vias quando o angulo oscila perto do limite.
-     */
+    /** Inclina para a faixa lateral; ao voltar quase ao nivel, retorna ao centro. */
     private int viaPelaInclinacao(int via, float angX) {
-        float n = Math.max(-INCLINACAO_MAX, Math.min(INCLINACAO_MAX, angX)) / INCLINACAO_MAX;
-        if (via == GerenciadorPista.VIA_ESQUERDA && n > -LIMIAR_VOLTA) {
-            via = GerenciadorPista.VIA_CENTRO;
-        } else if (via == GerenciadorPista.VIA_DIREITA && n < LIMIAR_VOLTA) {
-            via = GerenciadorPista.VIA_CENTRO;
+        if (angX >= ANGULO_ENTRADA_FAIXA) return GerenciadorPista.VIA_DIREITA;
+        if (angX <= -ANGULO_ENTRADA_FAIXA) return GerenciadorPista.VIA_ESQUERDA;
+
+        if (via == GerenciadorPista.VIA_DIREITA && angX > ANGULO_SAIDA_FAIXA) {
+            return GerenciadorPista.VIA_DIREITA;
         }
-        if (via == GerenciadorPista.VIA_CENTRO) {
-            if (n < -LIMIAR_TROCA) via = GerenciadorPista.VIA_ESQUERDA;
-            else if (n > LIMIAR_TROCA) via = GerenciadorPista.VIA_DIREITA;
+        if (via == GerenciadorPista.VIA_ESQUERDA && angX < -ANGULO_SAIDA_FAIXA) {
+            return GerenciadorPista.VIA_ESQUERDA;
         }
-        return via;
+        return GerenciadorPista.VIA_CENTRO;
     }
 
     private void sairDaCalibracao() {
@@ -268,7 +267,16 @@ public class Main implements ApplicationListener {
             tempoAnimacaoCarro += dt;
             rua.update(dt);
             if (sensorClient.sensorPronto()) {
-                viaAtual = viaPelaInclinacao(viaAtual, sensorClient.getAngX());
+                float leitura = sensorClient.getAngX();
+                if (!inclinacaoInicializada) {
+                    inclinacaoFiltrada = leitura;
+                    inclinacaoInicializada = true;
+                } else {
+                    // Suaviza ruído do MPU entre leituras sem atrasar demais a resposta.
+                    float peso = 1f - (float) Math.exp(-dt / FILTRO_INCLINACAO_SEGUNDOS);
+                    inclinacaoFiltrada += (leitura - inclinacaoFiltrada) * peso;
+                }
+                viaAtual = viaPelaInclinacao(viaAtual, inclinacaoFiltrada);
             }
             // As tres primeiras linhas mostram o carro reto ou inclinado.
             // Alternar as quatro colunas anima as rodas e a carroceria.
@@ -276,9 +284,10 @@ public class Main implements ApplicationListener {
                     : viaAtual > GerenciadorPista.VIA_CENTRO ? 2 : 0;
             int coluna = (int) (tempoAnimacaoCarro * 8f) % quadrosCarro[linha].length;
             carroSprite = quadrosCarro[linha][coluna];
-            // o carro desliza suavemente ate o centro da via escolhida
+            // Cada inclinacao seleciona exatamente uma das tres faixas.
             float alvoX = GerenciadorPista.xDaVia(viaAtual, 1f);
-            carroX += (alvoX - carroX) * Math.min(1f, dt * 8f);
+            float pesoDirecao = 1f - (float) Math.exp(-RESPOSTA_DIRECAO * dt);
+            carroX += (alvoX - carroX) * pesoDirecao;
 
             pista.update(dt, carroX, CARRO_Y, CARRO_LARGURA, alturaDoCarro());
         }
