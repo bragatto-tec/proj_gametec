@@ -2,7 +2,6 @@ package io.github.some_example_name;
 
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.Input;
-import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.g2d.BitmapFont;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.math.Vector2;
@@ -27,14 +26,14 @@ public class TelaPreparacao {
     private boolean voltarSolicitado;
     private boolean iniciarSolicitado;
 
-    public TelaPreparacao(FitViewport viewport, BitmapFont font, Texture buttonTexture, SensorClient sensorClient) {
+    public TelaPreparacao(FitViewport viewport, BitmapFont font, UiAssets uiAssets, SensorClient sensorClient) {
         this.viewport = viewport;
         this.font = font;
         this.sensorClient = sensorClient;
         this.touchPos = new Vector2();
 
-        this.botaoVoltar = new Button(buttonTexture, font, "Voltar", 1.0f, 0.2f, 2.5f, 0.6f);
-        this.botaoIniciar = new Button(buttonTexture, font, "Iniciar", 4.5f, 0.2f, 2.5f, 0.6f);
+        this.botaoVoltar = new Button(uiAssets, "voltar", 1.0f, 0.2f, 2.5f, 0.6f);
+        this.botaoIniciar = new Button(uiAssets, "iniciar", 4.5f, 0.2f, 2.5f, 0.6f);
 
         this.nomeModo = "nenhum";
     }
@@ -57,6 +56,10 @@ public class TelaPreparacao {
     }
 
     public void input() {
+        touchPos.set(Gdx.input.getX(), Gdx.input.getY());
+        viewport.unproject(touchPos);
+        botaoVoltar.atualizarEstado(touchPos);
+        botaoIniciar.atualizarEstado(touchPos);
         if (contando) {
             return;
         }
@@ -67,9 +70,6 @@ public class TelaPreparacao {
         }
 
         if (Gdx.input.justTouched()) {
-            touchPos.set(Gdx.input.getX(), Gdx.input.getY());
-            viewport.unproject(touchPos);
-
             if (botaoVoltar.foiClicado(touchPos.x, touchPos.y)) {
                 voltarSolicitado = true;
             }

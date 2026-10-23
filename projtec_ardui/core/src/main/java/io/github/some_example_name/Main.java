@@ -35,7 +35,7 @@ public class Main implements ApplicationListener {
     private SpriteBatch spriteBatch;
     private FitViewport viewport;
     private BitmapFont font;
-    private Texture buttonTexture;
+    private UiAssets uiAssets;
     private Texture carroTexture;
     private TextureRegion carroSprite;
     private TextureRegion[][] quadrosCarro;
@@ -76,7 +76,7 @@ public class Main implements ApplicationListener {
         font.setUseIntegerPositions(false);
         font.getData().setScale(0.02f);
 
-        buttonTexture = new Texture("button.png");
+        uiAssets = new UiAssets(System.getProperty("rehabcar.language", "pt"));
         carroTexture = new Texture("carros/car_hatch_sem-placa_e63946_4x5.png");
         // A ultima linha da folha e o efeito de fogo, nao o carro normal.
         // split() entrega as linhas na ordem visual, de cima para baixo.
@@ -89,16 +89,16 @@ public class Main implements ApplicationListener {
         carroX = GerenciadorPista.xDaVia(viaAtual, 1f);
 
         sensorClient = sensorBaseUrl == null ? new SensorClient() : new SensorClient(sensorBaseUrl);
-        telaCalibracao = new TelaCalibracao(viewport, font, buttonTexture, sensorClient);
-        telaSelecaoModo = new TelaSelecaoModo(viewport, font, buttonTexture);
-        telaPreparacao = new TelaPreparacao(viewport, font, buttonTexture, sensorClient);
-        telaPausa = new TelaPausa(viewport, font, buttonTexture);
+        telaCalibracao = new TelaCalibracao(viewport, font, uiAssets, sensorClient);
+        telaSelecaoModo = new TelaSelecaoModo(viewport, font, uiAssets);
+        telaPreparacao = new TelaPreparacao(viewport, font, uiAssets, sensorClient);
+        telaPausa = new TelaPausa(viewport, font, uiAssets);
         estadoAtual = Estado.MENU;
 
-        botaoJogar = new Button(buttonTexture, font, "Jogar", 2.5f, 3.0f, 3, 0.7f);
-        botaoCalibrar = new Button(buttonTexture, font, "Calibrar sensor", 2.5f, 2.1f, 3, 0.7f);
-        botaoConfig = new Button(buttonTexture, font, "Configuracoes", 2.5f, 1.2f, 3, 0.7f);
-        botaoSair = new Button(buttonTexture, font, "Sair", 2.5f, 0.3f, 3, 0.7f);
+        botaoJogar = new Button(uiAssets, "jogar", 2.5f, 3.0f, 3, 0.7f);
+        botaoCalibrar = new Button(uiAssets, "calibrar_sensor", 2.5f, 2.1f, 3, 0.7f);
+        botaoConfig = new Button(uiAssets, "configuracoes", 2.5f, 1.2f, 3, 0.7f);
+        botaoSair = new Button(uiAssets, "sair", 2.5f, 0.3f, 3, 0.7f);
     }
 
     @Override
@@ -114,6 +114,14 @@ public class Main implements ApplicationListener {
     }
 
     private void input() {
+        if (estadoAtual == Estado.MENU) {
+            touchPos.set(Gdx.input.getX(), Gdx.input.getY());
+            viewport.unproject(touchPos);
+            botaoJogar.atualizarEstado(touchPos);
+            botaoCalibrar.atualizarEstado(touchPos);
+            botaoConfig.atualizarEstado(touchPos);
+            botaoSair.atualizarEstado(touchPos);
+        }
         if (estadoAtual == Estado.CALIBRANDO) {
             if (telaCalibracao.input()) {
                 sairDaCalibracao();
@@ -183,9 +191,6 @@ public class Main implements ApplicationListener {
         }
 
         if (Gdx.input.justTouched()) {
-            touchPos.set(Gdx.input.getX(), Gdx.input.getY());
-            viewport.unproject(touchPos);
-
             if (botaoJogar.foiClicado(touchPos.x, touchPos.y)) {
                 Gdx.app.log("RehabCar", "Jogar");
                 telaSelecaoModo.abrir();
@@ -355,7 +360,7 @@ public class Main implements ApplicationListener {
         pista.dispose();
         spriteBatch.dispose();
         font.dispose();
-        buttonTexture.dispose();
+        uiAssets.dispose();
         carroTexture.dispose();
     }
 }

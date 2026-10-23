@@ -5,7 +5,6 @@ import java.util.Locale;
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.Input;
 import com.badlogic.gdx.graphics.Color;
-import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.g2d.BitmapFont;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
@@ -16,7 +15,6 @@ import com.badlogic.gdx.utils.viewport.FitViewport;
 public class TelaCalibracao {
     private final FitViewport viewport;
     private final BitmapFont font;
-    private final Texture buttonTexture;
     private final SensorClient sensorClient;
     private final ShapeRenderer shapeRenderer;
     private final Button botaoIniciar;
@@ -25,16 +23,15 @@ public class TelaCalibracao {
 
     private boolean voltarSolicitado;
 
-    public TelaCalibracao(FitViewport viewport, BitmapFont font, Texture buttonTexture, SensorClient sensorClient) {
+    public TelaCalibracao(FitViewport viewport, BitmapFont font, UiAssets uiAssets, SensorClient sensorClient) {
         this.viewport = viewport;
         this.font = font;
-        this.buttonTexture = buttonTexture;
         this.sensorClient = sensorClient;
         this.shapeRenderer = new ShapeRenderer();
         this.touchPos = new Vector2();
 
-        this.botaoIniciar = new Button(buttonTexture, font, "Iniciar calibração", 1.2f, 0.15f, 2.8f, 0.6f);
-        this.botaoVoltar = new Button(buttonTexture, font, "Voltar", 4.3f, 0.15f, 2.0f, 0.6f);
+        this.botaoIniciar = new Button(uiAssets, "iniciar_calibracao", 1.2f, 0.15f, 2.8f, 0.6f);
+        this.botaoVoltar = new Button(uiAssets, "voltar_calib", 4.3f, 0.15f, 2.0f, 0.6f);
         this.botaoIniciar.setHabilitado(false);
         this.botaoVoltar.setHabilitado(true);
     }
@@ -56,15 +53,16 @@ public class TelaCalibracao {
     }
 
     public boolean input() {
+        touchPos.set(Gdx.input.getX(), Gdx.input.getY());
+        viewport.unproject(touchPos);
+        botaoIniciar.atualizarEstado(touchPos);
+        botaoVoltar.atualizarEstado(touchPos);
         if (Gdx.input.isKeyJustPressed(Input.Keys.ESCAPE) && !sensorClient.calibrando()) {
             voltarSolicitado = true;
             return true;
         }
 
         if (Gdx.input.justTouched()) {
-            touchPos.set(Gdx.input.getX(), Gdx.input.getY());
-            viewport.unproject(touchPos);
-
             if (botaoIniciar.foiClicado(touchPos.x, touchPos.y)) {
                 if (sensorClient.sensorPronto() && !sensorClient.calibrando()) {
                     sensorClient.iniciarCalibracao();

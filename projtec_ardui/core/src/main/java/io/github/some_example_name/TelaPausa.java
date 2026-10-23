@@ -3,7 +3,6 @@ package io.github.some_example_name;
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.Input;
 import com.badlogic.gdx.graphics.Color;
-import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.g2d.BitmapFont;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.math.Vector2;
@@ -14,7 +13,7 @@ public class TelaPausa {
     private final FitViewport viewport;
     private final BitmapFont font;
     private final Vector2 touchPos;
-    private final Texture fundoTexture;
+    private final UiAssets uiAssets;
 
     private final Button botaoContinuar;
     private final Button botaoReiniciar;
@@ -29,19 +28,19 @@ public class TelaPausa {
     private boolean recalibrarSolicitado;
     private boolean menuSolicitado;
 
-    public TelaPausa(FitViewport viewport, BitmapFont font, Texture buttonTexture) {
+    public TelaPausa(FitViewport viewport, BitmapFont font, UiAssets uiAssets) {
         this.viewport = viewport;
         this.font = font;
-        this.fundoTexture = buttonTexture;
+        this.uiAssets = uiAssets;
         this.touchPos = new Vector2();
 
-        this.botaoContinuar = new Button(buttonTexture, font, "Continuar", 2.4f, 3.4f, 3.2f, 0.6f);
-        this.botaoReiniciar = new Button(buttonTexture, font, "Reiniciar partida", 2.4f, 2.6f, 3.2f, 0.6f);
-        this.botaoRecalibrar = new Button(buttonTexture, font, "Recalibrar sensor", 2.4f, 1.8f, 3.2f, 0.6f);
-        this.botaoMenu = new Button(buttonTexture, font, "Voltar ao menu", 2.4f, 1.0f, 3.2f, 0.6f);
+        this.botaoContinuar = new Button(uiAssets, "continuar", 2.4f, 3.4f, 3.2f, 0.6f);
+        this.botaoReiniciar = new Button(uiAssets, "reiniciar_partida", 2.4f, 2.6f, 3.2f, 0.6f);
+        this.botaoRecalibrar = new Button(uiAssets, "recalibrar_sensor", 2.4f, 1.8f, 3.2f, 0.6f);
+        this.botaoMenu = new Button(uiAssets, "voltar_ao_menu", 2.4f, 1.0f, 3.2f, 0.6f);
 
-        this.botaoConfirmar = new Button(buttonTexture, font, "Sim, voltar ao menu", 2.4f, 2.0f, 3.2f, 0.6f);
-        this.botaoCancelar = new Button(buttonTexture, font, "Cancelar", 2.4f, 1.2f, 3.2f, 0.6f);
+        this.botaoConfirmar = new Button(uiAssets, "sim_voltar_ao_menu", 2.4f, 2.0f, 3.2f, 0.6f);
+        this.botaoCancelar = new Button(uiAssets, "cancelar", 2.4f, 1.2f, 3.2f, 0.6f);
     }
 
     public void abrir() {
@@ -61,6 +60,9 @@ public class TelaPausa {
     }
 
     public void input() {
+        touchPos.set(Gdx.input.getX(), Gdx.input.getY());
+        viewport.unproject(touchPos);
+        atualizarEstadosBotoes();
         boolean teclaPausa = Gdx.input.isKeyJustPressed(Input.Keys.ESCAPE)
                 || Gdx.input.isKeyJustPressed(Input.Keys.P);
 
@@ -70,9 +72,6 @@ public class TelaPausa {
                 return;
             }
             if (Gdx.input.justTouched()) {
-                touchPos.set(Gdx.input.getX(), Gdx.input.getY());
-                viewport.unproject(touchPos);
-
                 if (botaoConfirmar.foiClicado(touchPos.x, touchPos.y)) {
                     menuSolicitado = true;
                     confirmando = false;
@@ -90,9 +89,6 @@ public class TelaPausa {
         }
 
         if (Gdx.input.justTouched()) {
-            touchPos.set(Gdx.input.getX(), Gdx.input.getY());
-            viewport.unproject(touchPos);
-
             if (botaoContinuar.foiClicado(touchPos.x, touchPos.y)) {
                 continuarSolicitado = true;
             }
@@ -130,7 +126,7 @@ public class TelaPausa {
 
         batch.begin();
         batch.setColor(0f, 0f, 0f, 0.75f);
-        batch.draw(fundoTexture, 2.0f, 0.55f, 4.0f, 4.1f);
+        batch.draw(uiAssets.whitePixel(), 2.0f, 0.55f, 4.0f, 4.1f);
         batch.setColor(Color.WHITE);
 
         if (confirmando) {
@@ -148,5 +144,14 @@ public class TelaPausa {
             botaoMenu.draw(batch);
         }
         batch.end();
+    }
+
+    private void atualizarEstadosBotoes() {
+        botaoContinuar.atualizarEstado(touchPos);
+        botaoReiniciar.atualizarEstado(touchPos);
+        botaoRecalibrar.atualizarEstado(touchPos);
+        botaoMenu.atualizarEstado(touchPos);
+        botaoConfirmar.atualizarEstado(touchPos);
+        botaoCancelar.atualizarEstado(touchPos);
     }
 }
