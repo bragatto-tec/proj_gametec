@@ -5,7 +5,7 @@ import java.util.Locale;
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.Input;
 import com.badlogic.gdx.graphics.Color;
-import com.badlogic.gdx.graphics.Texture;
+import com.badlogic.gdx.graphics.GL20;
 import com.badlogic.gdx.graphics.g2d.BitmapFont;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
@@ -14,9 +14,11 @@ import com.badlogic.gdx.utils.Align;
 import com.badlogic.gdx.utils.viewport.FitViewport;
 
 public class TelaCalibracao {
+    private static final float TOLERANCIA_NIVEL = 3f; // graus considerados "nivelado"
+
     private final FitViewport viewport;
     private final BitmapFont font;
-    private final Texture buttonTexture;
+    private final UiAssets uiAssets;
     private final SensorClient sensorClient;
     private final ShapeRenderer shapeRenderer;
     private final Button botaoIniciar;
@@ -25,16 +27,16 @@ public class TelaCalibracao {
 
     private boolean voltarSolicitado;
 
-    public TelaCalibracao(FitViewport viewport, BitmapFont font, Texture buttonTexture, SensorClient sensorClient) {
+    public TelaCalibracao(FitViewport viewport, BitmapFont font, UiAssets uiAssets, SensorClient sensorClient) {
         this.viewport = viewport;
         this.font = font;
-        this.buttonTexture = buttonTexture;
+        this.uiAssets = uiAssets;
         this.sensorClient = sensorClient;
         this.shapeRenderer = new ShapeRenderer();
         this.touchPos = new Vector2();
 
-        this.botaoIniciar = new Button(buttonTexture, font, "Iniciar calibração", 1.2f, 0.15f, 2.8f, 0.6f);
-        this.botaoVoltar = new Button(buttonTexture, font, "Voltar", 4.3f, 0.15f, 2.0f, 0.6f);
+        this.botaoIniciar = new Button(uiAssets, "iniciar_calibracao", 1.2f, 0.15f, 2.8f, 0.6f);
+        this.botaoVoltar = new Button(uiAssets, "voltar_calib", 4.3f, 0.15f, 2.0f, 0.6f);
         this.botaoIniciar.setHabilitado(false);
         this.botaoVoltar.setHabilitado(true);
     }
@@ -56,15 +58,16 @@ public class TelaCalibracao {
     }
 
     public boolean input() {
+        touchPos.set(Gdx.input.getX(), Gdx.input.getY());
+        viewport.unproject(touchPos);
+        botaoIniciar.atualizarEstado(touchPos);
+        botaoVoltar.atualizarEstado(touchPos);
         if (Gdx.input.isKeyJustPressed(Input.Keys.ESCAPE) && !sensorClient.calibrando()) {
             voltarSolicitado = true;
             return true;
         }
 
         if (Gdx.input.justTouched()) {
-            touchPos.set(Gdx.input.getX(), Gdx.input.getY());
-            viewport.unproject(touchPos);
-
             if (botaoIniciar.foiClicado(touchPos.x, touchPos.y)) {
                 if (sensorClient.sensorPronto() && !sensorClient.calibrando()) {
                     sensorClient.iniciarCalibracao();
@@ -87,169 +90,182 @@ public class TelaCalibracao {
         return voltarSolicitado;
     }
 
+    // ------------------------------------------------------------------ desenho
+
     public void draw(SpriteBatch batch) {
         viewport.apply();
         batch.setProjectionMatrix(viewport.getCamera().combined);
         shapeRenderer.setProjectionMatrix(viewport.getCamera().combined);
+        float largura = viewport.getWorldWidth();
 
+        // 1) fundo, titulo e paineis
         batch.begin();
-        font.draw(batch, "CALIBRACAO DO SENSOR", 0, 4.88f, viewport.getWorldWidth(), Align.center, false);
-        desenharTextoAdaptado(batch, "Apoie o sensor em superfície plana e mantenha-o imóvel",
-                0.3f, 4.57f, 7.4f, Align.center, 0.014f);
+        Ui.fundo(batch, largura, viewport.getWorldHeight());
+        Ui.texto(batch, font, "CALIBRAÇÃO DO SENSOR", 0, 4.88f, largura, Align.center, 0.023f, Color.WHITE, false);
+        Ui.texto(batch, font, "Apoie o sensor em superfície plana e mantenha-o imóvel",
+                0.3f, 4.5f, 7.4f, Align.center, 0.0125f, Ui.MUTED, false);
+
+        String url = sensorClient.getUrlAtual();
+        Color corConexao = sensorClient.conectado() ? Ui.VERDE : Ui.VERMELHO;
+        Color corSensor = !sensorClient.conectado() ? Ui.VERMELHO : (sensorClient.sensorPronto() ? Ui.VERDE : Ui.AMARELO);
+        desenharCartaoStatus(batch, 0.4f, "ESP32", sensorClient.conectado() ? "Conectado" : "Desconectado",
+                url.isEmpty() ? "Buscando endereço..." : url.replace("http://", ""), corConexao);
+        desenharCartaoStatus(batch, 4.1f, "MPU6050", sensorClient.sensorPronto() ? "Leitura OK" : "Sem leitura",
+                sensorClient.sensorPronto() ? "Sensor respondendo" : "Aguardando dados", corSensor);
+
+        Ui.painel(batch, Ui.Estilo.NEUTRO, 0.4f, 1.72f, 3.5f, 1.46f);
+        Ui.painel(batch, Ui.Estilo.NEUTRO, 4.1f, 1.72f, 3.5f, 1.46f);
+        Ui.texto(batch, font, "NIVELAMENTO", 0.62f, 3.08f, 3.0f, Align.left, 0.011f, Ui.MUTED, false);
+        Ui.texto(batch, font, "LEITURAS", 4.32f, 3.08f, 3.0f, Align.left, 0.011f, Ui.MUTED, false);
+        Ui.painel(batch, estiloMensagem(), 0.4f, 1.14f, 7.2f, 0.48f);
         batch.end();
 
-        desenharStatus();
+        // 2) alvo (formas)
         desenharAlvo();
-        desenharPainelMensagem();
-        desenharProgresso();
 
+        // 3) textos e controles por cima
         batch.begin();
-        desenharStatusTexto(batch);
-        desenharAlvoTexto(batch);
-        desenharProgressoTexto(batch);
+        desenharLeituras(batch);
+        desenharMensagem(batch);
+        desenharProgresso(batch);
         botaoIniciar.draw(batch);
         botaoVoltar.draw(batch);
         batch.end();
     }
 
-    private void desenharStatus() {
-        Color corConexao = sensorClient.conectado() ? Color.GREEN : Color.RED;
-        Color corSensor = sensorClient.sensorPronto() ? Color.GREEN : Color.YELLOW;
-
-        if (!sensorClient.conectado()) {
-            corSensor = Color.RED;
-        }
-
-        desenharCaixaStatus(0.4f, 3.48f, 3.45f, 0.82f, corConexao);
-        desenharCaixaStatus(4.15f, 3.48f, 3.45f, 0.82f, corSensor);
+    private void desenharCartaoStatus(SpriteBatch batch, float x, String rotulo, String estado, String detalhe, Color cor) {
+        float y = 3.28f;
+        Ui.painel(batch, Ui.Estilo.NEUTRO, x, y, 3.5f, 0.9f);
+        Ui.led(batch, cor, x + 0.38f, y + 0.45f, 0.34f);
+        Ui.texto(batch, font, rotulo, x + 0.72f, y + 0.8f, 2.6f, Align.left, 0.011f, Ui.MUTED, false);
+        Ui.texto(batch, font, estado, x + 0.72f, y + 0.6f, 2.6f, Align.left, 0.019f, Color.WHITE, false);
+        Ui.texto(batch, font, detalhe, x + 0.72f, y + 0.28f, 2.65f, Align.left, 0.0095f, Ui.MUTED, false);
     }
 
-    private void desenharCaixaStatus(float x, float y, float width, float height, Color cor) {
-        shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
-        shapeRenderer.setColor(new Color(0.15f, 0.15f, 0.2f, 1f));
-        shapeRenderer.rect(x, y, width, height);
-        shapeRenderer.setColor(cor);
-        shapeRenderer.rect(x, y, 0.12f, height);
-        shapeRenderer.end();
-    }
-
-    private void desenharStatusTexto(SpriteBatch batch) {
-        font.draw(batch, "ESP32", 0.62f, 4.17f, 3.1f, Align.left, false);
-        font.draw(batch, sensorClient.conectado() ? "Conectado" : "Desconectado",
-                0.62f, 3.91f, 3.1f, Align.left, false);
-        font.draw(batch, "MPU6050", 4.37f, 4.17f, 3.1f, Align.left, false);
-        font.draw(batch, sensorClient.sensorPronto() ? "Leitura OK" : "Sem leitura",
-                4.37f, 3.91f, 3.1f, Align.left, false);
-        String url = sensorClient.getUrlAtual();
-        desenharTextoAdaptado(batch, url.isEmpty() ? "Buscando endereco..." : url.replace("http://", ""),
-                0.62f, 3.62f, 3.1f, Align.left, 0.009f);
+    private boolean nivelado() {
+        return sensorClient.sensorPronto()
+                && Math.abs(sensorClient.getAngX()) < TOLERANCIA_NIVEL
+                && Math.abs(sensorClient.getAngY()) < TOLERANCIA_NIVEL;
     }
 
     private void desenharAlvo() {
-        float centroX = 2.65f;
-        float centroY = 2.48f;
-        float raio = 0.72f;
+        float centroX = 2.15f;
+        float centroY = 2.4f;
+        float raio = 0.62f;
+        boolean ok = nivelado();
+        Color corPonto = ok ? Ui.VERDE : Ui.AZUL;
 
+        Gdx.gl.glEnable(GL20.GL_BLEND);
+        Gdx.gl.glBlendFunc(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA);
+
+        shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
+        shapeRenderer.setColor(0.04f, 0.09f, 0.18f, 0.9f);
+        shapeRenderer.circle(centroX, centroY, raio + 0.06f, 48);
+        if (ok) {
+            shapeRenderer.setColor(Ui.VERDE.r, Ui.VERDE.g, Ui.VERDE.b, 0.22f);
+            shapeRenderer.circle(centroX, centroY, raio / 3f, 32);
+        }
+        shapeRenderer.end();
+
+        Gdx.gl.glLineWidth(2f);
         shapeRenderer.begin(ShapeRenderer.ShapeType.Line);
-        shapeRenderer.setColor(Color.WHITE);
-        for (int i = 1; i <= 4; i++) {
-            shapeRenderer.circle(centroX, centroY, raio * i / 3f, 32);
+        shapeRenderer.setColor(0.79f, 0.84f, 0.94f, 0.55f);
+        for (int i = 1; i <= 3; i++) {
+            shapeRenderer.circle(centroX, centroY, raio * i / 3f, 48);
         }
+        shapeRenderer.setColor(0.79f, 0.84f, 0.94f, 0.30f);
+        shapeRenderer.line(centroX - raio - 0.06f, centroY, centroX + raio + 0.06f, centroY);
+        shapeRenderer.line(centroX, centroY - raio - 0.06f, centroX, centroY + raio + 0.06f);
         shapeRenderer.end();
 
-        float pontoX = centroX + (sensorClient.getAngY() / 45f) * raio * 0.85f;
-        float pontoY = centroY + (sensorClient.getAngX() / 45f) * raio * 0.85f;
-
-        shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
-        shapeRenderer.setColor(Color.SKY);
-        shapeRenderer.circle(pontoX, pontoY, 0.08f, 16);
-        shapeRenderer.end();
-    }
-
-    private void desenharAlvoTexto(SpriteBatch batch) {
-        font.draw(batch, "X: " + String.format(Locale.ROOT, "%.1f", sensorClient.getAngX()),
-                4.55f, 3.0f, 2.9f, Align.left, false);
-        font.draw(batch, "Y: " + String.format(Locale.ROOT, "%.1f", sensorClient.getAngY()),
-                4.55f, 2.5f, 2.9f, Align.left, false);
-        font.draw(batch, "Temp: " + String.format(Locale.ROOT, "%.1f C", sensorClient.getTemp()),
-                4.55f, 2.0f, 2.9f, Align.left, false);
-    }
-
-    private void desenharPainelMensagem() {
-        shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
-        if (sensorClient.calibracaoFalhou()) {
-            shapeRenderer.setColor(new Color(0.32f, 0.10f, 0.12f, 1f));
-        } else if (sensorClient.calibrando()) {
-            shapeRenderer.setColor(new Color(0.10f, 0.22f, 0.32f, 1f));
-        } else if (sensorClient.calibracaoConcluidaComSucesso()) {
-            shapeRenderer.setColor(new Color(0.10f, 0.30f, 0.18f, 1f));
-        } else {
-            shapeRenderer.setColor(new Color(0.15f, 0.15f, 0.2f, 1f));
+        // ponto (limitado ao disco)
+        float dx = (sensorClient.getAngY() / 45f) * raio * 0.85f;
+        float dy = (sensorClient.getAngX() / 45f) * raio * 0.85f;
+        float dist = (float) Math.sqrt(dx * dx + dy * dy);
+        float maximo = raio * 0.95f;
+        if (dist > maximo) {
+            dx *= maximo / dist;
+            dy *= maximo / dist;
         }
-        shapeRenderer.rect(0.4f, 1.05f, 7.2f, 0.46f);
-        shapeRenderer.end();
-    }
-
-    private void desenharProgresso() {
-        float x = 0.8f;
-        float y = 0.82f;
-        float largura = 6.4f;
-        float altura = 0.14f;
-        int progresso = sensorClient.getProgresso();
-
         shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
-        shapeRenderer.setColor(new Color(0.18f, 0.18f, 0.22f, 1f));
-        shapeRenderer.rect(x, y, largura, altura);
-        if (sensorClient.calibrando()) {
-            shapeRenderer.setColor(new Color(0.2f, 0.7f, 1f, 1f));
-            shapeRenderer.rect(x, y, largura * (progresso / 100f), altura);
-        } else if (sensorClient.calibracaoFalhou()) {
-            shapeRenderer.setColor(Color.RED);
-            shapeRenderer.rect(x, y, largura, altura);
-        } else if (sensorClient.calibracaoConcluidaComSucesso()) {
-            shapeRenderer.setColor(Color.GREEN);
-            shapeRenderer.rect(x, y, largura, altura);
-        }
+        shapeRenderer.setColor(corPonto.r, corPonto.g, corPonto.b, 0.25f);
+        shapeRenderer.circle(centroX + dx, centroY + dy, 0.15f, 24);
+        shapeRenderer.setColor(corPonto);
+        shapeRenderer.circle(centroX + dx, centroY + dy, 0.08f, 24);
         shapeRenderer.end();
+        Gdx.gl.glLineWidth(1f);
     }
 
-    private void desenharProgressoTexto(SpriteBatch batch) {
-        float x = 0.8f;
-        float largura = 7.0f;
-        int progresso = sensorClient.getProgresso();
-        if (sensorClient.calibrando()) {
-            String mensagem = sensorClient.getMensagemErro();
-            if (mensagem.isEmpty()) {
-                mensagem = "Mantenha imovel... " + progresso + "%";
+    private void desenharLeituras(SpriteBatch batch) {
+        float x = 4.32f;
+        float largura = 3.06f;
+        float[] topos = {2.8f, 2.42f, 2.04f};
+        String[] rotulos = {"Inclinação X", "Inclinação Y", "Temperatura"};
+        String[] valores = {
+                String.format(Locale.ROOT, "%.1f°", sensorClient.getAngX()),
+                String.format(Locale.ROOT, "%.1f°", sensorClient.getAngY()),
+                String.format(Locale.ROOT, "%.1f °C", sensorClient.getTemp())};
+        for (int i = 0; i < 3; i++) {
+            boolean angulo = i < 2;
+            float ang = i == 0 ? sensorClient.getAngX() : sensorClient.getAngY();
+            Color corValor = angulo && sensorClient.sensorPronto() && Math.abs(ang) < TOLERANCIA_NIVEL ? Ui.VERDE : Color.WHITE;
+            Ui.textoLinha(batch, font, rotulos[i], x, topos[i] - 0.36f, largura, 0.4f, Align.left, 0.0135f, Ui.MUTED);
+            Ui.textoLinha(batch, font, valores[i], x, topos[i] - 0.36f, largura, 0.4f, Align.right, 0.02f, corValor);
+            if (i < 2) {
+                Ui.retangulo(batch, x, topos[i] - 0.35f, largura, 0.012f, new Color(0.79f, 0.84f, 0.94f, 0.18f));
             }
-            desenharTextoAdaptado(batch, mensagem, x, 1.22f, largura, Align.center, 0.009f);
+        }
+    }
+
+    private Ui.Estilo estiloMensagem() {
+        if (sensorClient.calibracaoFalhou()) return Ui.Estilo.VERMELHO;
+        if (sensorClient.calibrando()) return Ui.Estilo.AZUL;
+        if (sensorClient.calibracaoConcluidaComSucesso()) return Ui.Estilo.VERDE;
+        return Ui.Estilo.NEUTRO;
+    }
+
+    private void desenharMensagem(SpriteBatch batch) {
+        int progresso = sensorClient.getProgresso();
+        String mensagem;
+        if (sensorClient.calibrando()) {
+            mensagem = sensorClient.getMensagemErro();
+            if (mensagem.isEmpty()) {
+                mensagem = "Mantenha imóvel... " + progresso + "%";
+            }
         } else if (sensorClient.calibracaoFalhou()) {
-            String mensagem = sensorClient.getMensagemErro();
+            mensagem = sensorClient.getMensagemErro();
             if (mensagem.isEmpty()) {
                 mensagem = "Reposicione o sensor e tente novamente.";
             }
-            desenharTextoAdaptado(batch, mensagem, x, 1.22f, largura, Align.center, 0.009f);
         } else if (sensorClient.calibracaoConcluidaComSucesso()) {
-            desenharTextoAdaptado(batch, "Calibração concluída com sucesso!",
-                    x, 1.22f, largura, Align.center, 0.011f);
+            mensagem = "Calibração concluída com sucesso!";
         } else if (!sensorClient.sensorPronto() && !sensorClient.getMensagemErro().isEmpty()) {
-            desenharTextoAdaptado(batch, sensorClient.getMensagemErro(),
-                    x, 1.22f, largura, Align.center, 0.009f);
+            mensagem = sensorClient.getMensagemErro();
         } else {
-            desenharTextoAdaptado(batch, "Pronto para iniciar",
-                    x, 1.22f, largura, Align.center, 0.011f);
+            mensagem = "Pronto para iniciar";
         }
+        Ui.textoNaCaixa(batch, font, mensagem, 0.6f, 1.14f, 6.8f, 0.48f, Color.WHITE, 0.0135f, 0.0105f, 0.0085f);
     }
 
-    private void desenharTextoAdaptado(SpriteBatch batch, String texto, float x, float y,
-                                       float largura, int alinhamento, float escala) {
-        float escalaX = font.getData().scaleX;
-        float escalaY = font.getData().scaleY;
-        font.getData().setScale(escala);
-        try {
-            font.draw(batch, texto, x, y, largura, alinhamento, true);
-        } finally {
-            font.getData().setScale(escalaX, escalaY);
+    private void desenharProgresso(SpriteBatch batch) {
+        float x = 0.4f;
+        float y = 0.84f;
+        float largura = 6.5f;
+        float fracao = 0f;
+        Color cor = Ui.AZUL;
+        if (sensorClient.calibrando()) {
+            fracao = sensorClient.getProgresso() / 100f;
+        } else if (sensorClient.calibracaoFalhou()) {
+            fracao = 1f;
+            cor = Ui.VERMELHO;
+        } else if (sensorClient.calibracaoConcluidaComSucesso()) {
+            fracao = 1f;
+            cor = Ui.VERDE;
+        }
+        Ui.barra(batch, x, y, largura, fracao, cor);
+        if (sensorClient.calibrando()) {
+            Ui.textoLinha(batch, font, sensorClient.getProgresso() + "%", x + largura + 0.1f, y, 0.7f,
+                    Ui.BARRA_ALTURA, Align.left, 0.0135f, Color.WHITE);
         }
     }
 
