@@ -30,11 +30,13 @@ public class GerenciadorPista {
     private static final float DESVIO_VIA = 1.45f;     // distancia do centro da via lateral, na escala 1
 
     // --- spawn ---
-    private static final float CHANCE_MOEDA = 0.70f;   // o resto (30%) e cone
-    private static final float SPAWN_MIN = 0.70f;      // segundos entre itens
-    private static final float SPAWN_MAX = 1.40f;
     private static final float Z_NASCIMENTO = 22f;     // longe, perto do horizonte (escala ~0,045)
-    private static final float VELOCIDADE_Z = 4.5f;    // unidades de z por segundo
+
+    // --- dificuldade por fase (posicao 0 = fase 1, 1 = fase 2, 2 = fase 3) ---
+    private static final float[] VELOCIDADES_Z = {4.5f, 5.5f, 6.5f};     // unidades de z por segundo
+    private static final float[] SPAWN_MINIMOS = {0.70f, 0.55f, 0.45f};  // segundos entre itens
+    private static final float[] SPAWN_MAXIMOS = {1.40f, 1.15f, 0.90f};
+    private static final float[] CHANCES_MOEDA = {0.70f, 0.60f, 0.50f};  // o resto e cone
 
     private static final int QUADROS_MOEDA = 8;        // moeda.png = 8 quadros de 16x16
 
@@ -48,6 +50,10 @@ public class GerenciadorPista {
     private float tempoParaProximo;
     private int moedas;
     private int batidas;
+    private float velocidadeZ;
+    private float spawnMin;
+    private float spawnMax;
+    private float chanceMoeda;
 
     public GerenciadorPista() {
         texturaCone = new Texture("cone.png");
@@ -87,6 +93,16 @@ public class GerenciadorPista {
         moedas = 0;
         batidas = 0;
         tempoParaProximo = 1.0f; // pequena folga antes do primeiro item
+        setFase(1);
+    }
+
+    /** Ajusta velocidade, frequencia de itens e chance de cone conforme a fase (1 a 3). */
+    public void setFase(int fase) {
+        int i = Math.max(1, Math.min(fase, VELOCIDADES_Z.length)) - 1;
+        velocidadeZ = VELOCIDADES_Z[i];
+        spawnMin = SPAWN_MINIMOS[i];
+        spawnMax = SPAWN_MAXIMOS[i];
+        chanceMoeda = CHANCES_MOEDA[i];
     }
 
     public void update(float dt, float carroX, float carroY, float carroLargura, float carroAltura) {
@@ -99,7 +115,7 @@ public class GerenciadorPista {
         tempoParaProximo -= dt;
         if (tempoParaProximo <= 0f) {
             spawnItem();
-            tempoParaProximo = MathUtils.random(SPAWN_MIN, SPAWN_MAX);
+            tempoParaProximo = MathUtils.random(spawnMin, spawnMax);
         }
 
         for (int i = itens.size - 1; i >= 0; i--) {
@@ -123,12 +139,12 @@ public class GerenciadorPista {
     public void spawnItem() {
         int via = MathUtils.random(0, NUM_VIAS - 1);
         ItemPista item;
-        if (MathUtils.randomBoolean(CHANCE_MOEDA)) {
+        if (MathUtils.randomBoolean(chanceMoeda)) {
             item = new ItemPista(ItemPista.Tipo.MOEDA, via, quadrosMoeda,
-                    0.45f, 0.12f, 0.10f, Z_NASCIMENTO, VELOCIDADE_Z);
+                    0.45f, 0.12f, 0.10f, Z_NASCIMENTO, velocidadeZ);
         } else {
             item = new ItemPista(ItemPista.Tipo.CONE, via, regiaoCone,
-                    0.55f, 0f, 0.12f, Z_NASCIMENTO, VELOCIDADE_Z);
+                    0.55f, 0f, 0.12f, Z_NASCIMENTO, velocidadeZ);
         }
         itens.add(item);
     }
