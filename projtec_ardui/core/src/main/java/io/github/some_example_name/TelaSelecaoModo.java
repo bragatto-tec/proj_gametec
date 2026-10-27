@@ -10,6 +10,12 @@ import com.badlogic.gdx.math.Vector2;
 import com.badlogic.gdx.utils.Align;
 import com.badlogic.gdx.utils.viewport.FitViewport;
 
+/**
+ * Tela 3: escolha da duracao da partida (1, 2 ou 3 minutos).
+ * O jogo tem um modo so (horizontal: inclinar o pe para os lados troca de faixa).
+ * Os modos vertical e combinado ficaram como trabalho futuro; as constantes
+ * continuam aqui porque Ui.iconeModo e TelaPreparacao usam o numero do modo.
+ */
 public class TelaSelecaoModo {
     public static final int NENHUM = 0;
     public static final int VERTICAL = 1;
@@ -20,16 +26,12 @@ public class TelaSelecaoModo {
     private final BitmapFont font;
     private final Vector2 touchPos;
 
-    private final ModeCard botaoVertical;
-    private final ModeCard botaoHorizontal;
-    private final ModeCard botaoCombinado;
     private final Button botaoVoltar;
     private final Button botaoSelecionar;
     private final Rectangle area1Min;
     private final Rectangle area2Min;
     private final Rectangle area3Min;
 
-    private int modoEscolhido;
     private int duracaoSegundos;
     private boolean voltarSolicitado;
     private boolean selecionarSolicitado;
@@ -39,27 +41,19 @@ public class TelaSelecaoModo {
         this.font = font;
         this.touchPos = new Vector2();
 
-        this.botaoVertical = new ModeCard(uiAssets, "vertical", 0.44f, 1.0f, 2.24f, 2.5f);
-        this.botaoHorizontal = new ModeCard(uiAssets, "horizontal", 2.88f, 1.0f, 2.24f, 2.5f);
-        this.botaoCombinado = new ModeCard(uiAssets, "combinado", 5.32f, 1.0f, 2.24f, 2.5f);
         this.botaoVoltar = new Button(uiAssets, "voltar", 1.0f, 0.2f, 2.5f, 0.6f);
         this.botaoSelecionar = new Button(uiAssets, "selecionar", 4.5f, 0.2f, 2.5f, 0.6f);
-        this.area1Min = new Rectangle(3.0f, 3.72f, 1.2f, 0.42f);
-        this.area2Min = new Rectangle(4.4f, 3.72f, 1.2f, 0.42f);
-        this.area3Min = new Rectangle(5.8f, 3.72f, 1.2f, 0.42f);
+        this.area1Min = new Rectangle(1.0f, 2.3f, 1.8f, 0.9f);
+        this.area2Min = new Rectangle(3.1f, 2.3f, 1.8f, 0.9f);
+        this.area3Min = new Rectangle(5.2f, 2.3f, 1.8f, 0.9f);
 
-        this.modoEscolhido = NENHUM;
         this.duracaoSegundos = 60;
-        this.botaoSelecionar.setHabilitado(false);
     }
 
     public void abrir() {
-        modoEscolhido = NENHUM;
         duracaoSegundos = 60;
-        atualizarSelecaoCards();
         voltarSolicitado = false;
         selecionarSolicitado = false;
-        botaoSelecionar.setHabilitado(false);
     }
 
     public void fechar() {
@@ -78,21 +72,6 @@ public class TelaSelecaoModo {
         }
 
         if (Gdx.input.justTouched()) {
-            if (botaoVertical.foiClicado(touchPos.x, touchPos.y)) {
-                modoEscolhido = VERTICAL;
-                atualizarSelecaoCards();
-                botaoSelecionar.setHabilitado(true);
-            }
-            if (botaoHorizontal.foiClicado(touchPos.x, touchPos.y)) {
-                modoEscolhido = HORIZONTAL;
-                atualizarSelecaoCards();
-                botaoSelecionar.setHabilitado(true);
-            }
-            if (botaoCombinado.foiClicado(touchPos.x, touchPos.y)) {
-                modoEscolhido = COMBINADO;
-                atualizarSelecaoCards();
-                botaoSelecionar.setHabilitado(true);
-            }
             if (area1Min.contains(touchPos.x, touchPos.y)) {
                 duracaoSegundos = 60;
             }
@@ -120,7 +99,7 @@ public class TelaSelecaoModo {
     }
 
     public int getModoEscolhido() {
-        return modoEscolhido;
+        return HORIZONTAL;
     }
 
     public int getDuracaoSegundos() {
@@ -128,36 +107,29 @@ public class TelaSelecaoModo {
     }
 
     public String getNomeModo() {
-        if (modoEscolhido == VERTICAL) {
-            return "Vertical";
-        }
-        if (modoEscolhido == HORIZONTAL) {
-            return "Horizontal";
-        }
-        if (modoEscolhido == COMBINADO) {
-            return "Combinado";
-        }
-        return "nenhum";
+        return "Horizontal";
     }
 
     public void draw(SpriteBatch batch) {
         viewport.apply();
         batch.setProjectionMatrix(viewport.getCamera().combined);
+        float largura = viewport.getWorldWidth();
 
         batch.begin();
-        font.draw(batch, "ESCOLHA O MODO DE JOGO", 0, 4.8f, viewport.getWorldWidth(), Align.center, false);
+        Ui.fundo(batch, largura, viewport.getWorldHeight());
+        Ui.texto(batch, font, "DURAÇÃO DA PARTIDA", 0, 4.85f, largura, Align.center, 0.023f, Color.WHITE, false);
+        Ui.texto(batch, font, "Incline o pé para os lados para trocar de faixa.",
+                0, 4.1f, largura, Align.center, 0.0150f, Ui.MUTED, false);
 
-        botaoVertical.draw(batch);
-        botaoHorizontal.draw(batch);
-        botaoCombinado.draw(batch);
-        botaoVoltar.draw(batch);
-        botaoSelecionar.draw(batch);
-
-        Ui.textoLinha(batch, font, "Duração da partida", 0.5f, 3.72f, 2.4f, 0.42f, Align.left, 0.0135f, Ui.MUTED);
         desenharDuracao(batch, area1Min, 60);
         desenharDuracao(batch, area2Min, 120);
         desenharDuracao(batch, area3Min, 180);
 
+        Ui.texto(batch, font, "A partida tem 3 fases: a cada terço do tempo a pista fica mais rápida.",
+                0, 1.75f, largura, Align.center, 0.0135f, Ui.MUTED, false);
+
+        botaoVoltar.draw(batch);
+        botaoSelecionar.draw(batch);
         batch.end();
     }
 
@@ -165,12 +137,6 @@ public class TelaSelecaoModo {
         boolean escolhida = duracaoSegundos == segundos;
         Ui.pilula(batch, escolhida, area.x, area.y, area.width, area.height);
         Ui.textoLinha(batch, font, (segundos / 60) + " min", area.x, area.y, area.width, area.height,
-                Align.center, 0.015f, escolhida ? Ui.AMARELO : Color.WHITE);
-    }
-
-    private void atualizarSelecaoCards() {
-        botaoVertical.setSelected(modoEscolhido == VERTICAL);
-        botaoHorizontal.setSelected(modoEscolhido == HORIZONTAL);
-        botaoCombinado.setSelected(modoEscolhido == COMBINADO);
+                Align.center, 0.025f, escolhida ? Ui.AMARELO : Color.WHITE);
     }
 }

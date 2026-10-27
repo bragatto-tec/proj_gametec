@@ -7,7 +7,6 @@ import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.g2d.BitmapFont;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
-import com.badlogic.gdx.graphics.g2d.TextureRegion;
 import com.badlogic.gdx.math.Vector2;
 import com.badlogic.gdx.utils.Align;
 import com.badlogic.gdx.utils.ScreenUtils;
@@ -24,16 +23,12 @@ public class Main implements ApplicationListener {
         PREPARACAO,
         PAUSA,
         JOGANDO,
-        FIM
+        RESULTADOS
     }
 
-    // Carro e controle por vias
+    // Carro
     private static final float CARRO_LARGURA = 0.72f;
     private static final float CARRO_Y = 0.35f;
-    private static final float ANGULO_ENTRADA_FAIXA = 5f;
-    private static final float ANGULO_SAIDA_FAIXA = 3f;
-    private static final float FILTRO_INCLINACAO_SEGUNDOS = 0.12f;
-    private static final float RESPOSTA_DIRECAO = 12f;
 
     // Regras da partida
     private static final int MAX_BATIDAS = 3;
@@ -41,29 +36,29 @@ public class Main implements ApplicationListener {
     private static final int PONTOS_BATIDA = 5;
     private static final int FASES = 3;
     private static final float DURACAO_AVISO_FASE = 2f;
+    // Velocidade da animacao da rua em cada fase (1 = 24 quadros por segundo).
+    // Acompanha a velocidade dos itens: 4,5 / 5,5 / 6,5 no GerenciadorPista.
+    private static final float[] VELOCIDADES_RUA = {1.0f, 1.22f, 1.44f};
 
     private SpriteBatch spriteBatch;
     private FitViewport viewport;
     private BitmapFont font;
     private UiAssets uiAssets;
     private Texture carroTexture;
-    private TextureRegion carroSprite;
-    private TextureRegion[][] quadrosCarro;
-    private float tempoAnimacaoCarro;
+    private Car carro;
     private Vector2 touchPos;
     private Rua rua;
     private GerenciadorPista pista;
-    private float carroX;
-    private int viaAtual = GerenciadorPista.VIA_CENTRO;
-    private float inclinacaoFiltrada;
-    private boolean inclinacaoInicializada;
 
     private SensorClient sensorClient;
     private TelaCalibracao telaCalibracao;
     private TelaSelecaoModo telaSelecaoModo;
     private TelaPreparacao telaPreparacao;
     private TelaPausa telaPausa;
+    private TelaResultados telaResultados;
     private boolean recalibrandoDaPausa;
+    private int modoPartida = TelaSelecaoModo.NENHUM;
+    private String nomeModoPartida = "";
     private int duracaoPartida = 60;
     private float tempoRestante;
     private int fase = 1;
@@ -97,21 +92,17 @@ public class Main implements ApplicationListener {
 
         uiAssets = new UiAssets(System.getProperty("rehabcar.language", "pt"));
         carroTexture = new Texture("carros/car_hatch_sem-placa_e63946_4x5.png");
-        // A ultima linha da folha e o efeito de fogo, nao o carro normal.
-        // split() entrega as linhas na ordem visual, de cima para baixo.
-        quadrosCarro = TextureRegion.split(carroTexture,
-                carroTexture.getWidth() / 4, carroTexture.getHeight() / 5);
-        carroSprite = quadrosCarro[0][0];
+        carro = new Car(carroTexture, CARRO_Y, CARRO_LARGURA);
         touchPos = new Vector2();
         rua = new Rua(0, 0, viewport.getWorldWidth(), viewport.getWorldHeight(), 24f);
         pista = new GerenciadorPista();
-        carroX = GerenciadorPista.xDaVia(viaAtual, 1f);
 
         sensorClient = sensorBaseUrl == null ? new SensorClient() : new SensorClient(sensorBaseUrl);
         telaCalibracao = new TelaCalibracao(viewport, font, uiAssets, sensorClient);
         telaSelecaoModo = new TelaSelecaoModo(viewport, font, uiAssets);
         telaPreparacao = new TelaPreparacao(viewport, font, uiAssets, sensorClient);
         telaPausa = new TelaPausa(viewport, font, uiAssets);
+        telaResultados = new TelaResultados(viewport, font, uiAssets);
         estadoAtual = Estado.MENU;
 
         botaoJogar = new Button(uiAssets, "jogar", 2.5f, 3.0f, 3, 0.7f);
@@ -155,8 +146,10 @@ public class Main implements ApplicationListener {
                 telaSelecaoModo.fechar();
             } else if (telaSelecaoModo.isSelecionarSolicitado()) {
                 Gdx.app.log("RehabCar", "Modo escolhido: " + telaSelecaoModo.getNomeModo());
+                modoPartida = telaSelecaoModo.getModoEscolhido();
+                nomeModoPartida = telaSelecaoModo.getNomeModo();
                 duracaoPartida = telaSelecaoModo.getDuracaoSegundos();
-                telaPreparacao.abrir(telaSelecaoModo.getModoEscolhido(), telaSelecaoModo.getNomeModo(), duracaoPartida);
+                telaPreparacao.abrir(modoPartida, nomeModoPartida, duracaoPartida);
                 estadoAtual = Estado.PREPARACAO;
                 telaSelecaoModo.fechar();
             }
@@ -180,10 +173,10 @@ public class Main implements ApplicationListener {
             } else if (!sensorClient.sensorPronto()) {
                 // sem MPU6050: troca de via pelo teclado (setas ou A/D)
                 if (Gdx.input.isKeyJustPressed(Input.Keys.LEFT) || Gdx.input.isKeyJustPressed(Input.Keys.A)) {
-                    viaAtual = Math.max(GerenciadorPista.VIA_ESQUERDA, viaAtual - 1);
+                    carro.moverEsquerda();
                 }
                 if (Gdx.input.isKeyJustPressed(Input.Keys.RIGHT) || Gdx.input.isKeyJustPressed(Input.Keys.D)) {
-                    viaAtual = Math.min(GerenciadorPista.VIA_DIREITA, viaAtual + 1);
+                    carro.moverDireita();
                 }
             }
             return;
@@ -210,9 +203,16 @@ public class Main implements ApplicationListener {
             return;
         }
 
-        if (estadoAtual == Estado.FIM) {
-            if (Gdx.input.justTouched() || Gdx.input.isKeyJustPressed(Input.Keys.ESCAPE)) {
+        if (estadoAtual == Estado.RESULTADOS) {
+            telaResultados.input();
+            if (telaResultados.isJogarNovamenteSolicitado()) {
+                // mesmo modo e mesma duracao, passando pela contagem 3, 2, 1
+                telaPreparacao.abrir(modoPartida, nomeModoPartida, duracaoPartida);
+                estadoAtual = Estado.PREPARACAO;
+                telaResultados.fechar();
+            } else if (telaResultados.isMenuSolicitado()) {
                 estadoAtual = Estado.MENU;
+                telaResultados.fechar();
             }
             return;
         }
@@ -242,36 +242,23 @@ public class Main implements ApplicationListener {
         }
     }
 
-    private float alturaDoCarro() {
-        return CARRO_LARGURA * carroSprite.getRegionHeight() / carroSprite.getRegionWidth();
-    }
-
     private void reiniciarPartida() {
-        viaAtual = GerenciadorPista.VIA_CENTRO;
-        inclinacaoInicializada = false;
         tempoRestante = duracaoPartida;
         fase = 1;
         tempoAviso = DURACAO_AVISO_FASE;
         motivoFim = "";
-        tempoAnimacaoCarro = 0f;
-        carroSprite = quadrosCarro[0][0];
-        carroX = GerenciadorPista.xDaVia(viaAtual, 1f);
+        carro.reiniciar();
         rua.reiniciar();
+        rua.setVelocidade(VELOCIDADES_RUA[0]);
         pista.reiniciar();
     }
 
-    /** Inclina para a faixa lateral; ao voltar quase ao nivel, retorna ao centro. */
-    private int viaPelaInclinacao(int via, float angX) {
-        if (angX >= ANGULO_ENTRADA_FAIXA) return GerenciadorPista.VIA_DIREITA;
-        if (angX <= -ANGULO_ENTRADA_FAIXA) return GerenciadorPista.VIA_ESQUERDA;
-
-        if (via == GerenciadorPista.VIA_DIREITA && angX > ANGULO_SAIDA_FAIXA) {
-            return GerenciadorPista.VIA_DIREITA;
-        }
-        if (via == GerenciadorPista.VIA_ESQUERDA && angX < -ANGULO_SAIDA_FAIXA) {
-            return GerenciadorPista.VIA_ESQUERDA;
-        }
-        return GerenciadorPista.VIA_CENTRO;
+    private void encerrarPartida(String motivo) {
+        motivoFim = motivo;
+        telaResultados.abrir(motivoFim, nomeModoPartida, duracaoPartida, calcularPontos(),
+                pista.getMoedas(), pista.getMoedasPerdidas(), pista.getBatidas(), MAX_BATIDAS,
+                fase, FASES, duracaoPartida - tempoRestante);
+        estadoAtual = Estado.RESULTADOS;
     }
 
     private int calcularPontos() {
@@ -323,32 +310,12 @@ public class Main implements ApplicationListener {
         float dt = Gdx.graphics.getDeltaTime();
 
         if (estadoAtual == Estado.JOGANDO) {
-            tempoAnimacaoCarro += dt;
             rua.update(dt);
             if (sensorClient.sensorPronto()) {
-                float leitura = sensorClient.getAngX();
-                if (!inclinacaoInicializada) {
-                    inclinacaoFiltrada = leitura;
-                    inclinacaoInicializada = true;
-                } else {
-                    // Suaviza ruído do MPU entre leituras sem atrasar demais a resposta.
-                    float peso = 1f - (float) Math.exp(-dt / FILTRO_INCLINACAO_SEGUNDOS);
-                    inclinacaoFiltrada += (leitura - inclinacaoFiltrada) * peso;
-                }
-                viaAtual = viaPelaInclinacao(viaAtual, inclinacaoFiltrada);
+                carro.seguirInclinacao(sensorClient.getAngX(), dt);
             }
-            // As tres primeiras linhas mostram o carro reto ou inclinado.
-            // Alternar as quatro colunas anima as rodas e a carroceria.
-            int linha = viaAtual < GerenciadorPista.VIA_CENTRO ? 1
-                    : viaAtual > GerenciadorPista.VIA_CENTRO ? 2 : 0;
-            int coluna = (int) (tempoAnimacaoCarro * 8f) % quadrosCarro[linha].length;
-            carroSprite = quadrosCarro[linha][coluna];
-            // Cada inclinacao seleciona exatamente uma das tres faixas.
-            float alvoX = GerenciadorPista.xDaVia(viaAtual, 1f);
-            float pesoDirecao = 1f - (float) Math.exp(-RESPOSTA_DIRECAO * dt);
-            carroX += (alvoX - carroX) * pesoDirecao;
-
-            pista.update(dt, carroX, CARRO_Y, CARRO_LARGURA, alturaDoCarro());
+            carro.update(dt);
+            pista.update(dt, carro.getBounds());
 
             tempoRestante -= dt;
             if (tempoAviso > 0f) {
@@ -363,16 +330,15 @@ public class Main implements ApplicationListener {
             if (novaFase != fase) {
                 fase = novaFase;
                 pista.setFase(fase);
+                rua.setVelocidade(VELOCIDADES_RUA[fase - 1]);
                 tempoAviso = DURACAO_AVISO_FASE;
             }
 
             if (pista.getBatidas() >= MAX_BATIDAS) {
-                motivoFim = "Você bateu " + MAX_BATIDAS + " vezes";
-                estadoAtual = Estado.FIM;
+                encerrarPartida("Você bateu " + MAX_BATIDAS + " vezes");
             } else if (tempoRestante <= 0f) {
                 tempoRestante = 0f;
-                motivoFim = "Tempo esgotado";
-                estadoAtual = Estado.FIM;
+                encerrarPartida("Tempo esgotado");
             }
         }
 
@@ -417,8 +383,7 @@ public class Main implements ApplicationListener {
             spriteBatch.begin();
             rua.draw(spriteBatch);
             pista.draw(spriteBatch);
-            spriteBatch.draw(carroSprite, carroX - CARRO_LARGURA / 2f, CARRO_Y,
-                    CARRO_LARGURA, alturaDoCarro());
+            carro.draw(spriteBatch);
             Ui.hud(spriteBatch, font, viewport.getWorldWidth(), viewport.getWorldHeight(),
                     sensorClient.sensorPronto(), pista.getMoedas(), pista.getBatidas());
             desenharPlacar();
@@ -429,20 +394,8 @@ public class Main implements ApplicationListener {
             return;
         }
 
-        if (estadoAtual == Estado.FIM) {
-            float largura = viewport.getWorldWidth();
-            spriteBatch.begin();
-            Ui.fundo(spriteBatch, largura, viewport.getWorldHeight());
-            Ui.texto(spriteBatch, font, "FIM DE PARTIDA", 0, 4.6f, largura, Align.center, 0.025f, Color.WHITE, false);
-            Ui.texto(spriteBatch, font, motivoFim, 0, 4.0f, largura, Align.center, 0.0165f, Ui.MUTED, false);
-            Ui.painel(spriteBatch, Ui.Estilo.NEUTRO, 2.0f, 1.65f, 4.0f, 1.9f);
-            Ui.texto(spriteBatch, font, "Pontos: " + calcularPontos(), 2.5f, 3.3f, 3.2f, Align.left, 0.02f, Ui.AMARELO, false);
-            spriteBatch.draw(Ui.moeda(), 2.5f, 2.45f, 0.5f, 0.5f);
-            Ui.texto(spriteBatch, font, "Moedas: " + pista.getMoedas(), 3.2f, 2.9f, 2.5f, Align.left, 0.0165f, Color.WHITE, false);
-            spriteBatch.draw(Ui.cone(), 2.5f, 1.85f, 0.5f, 0.5f);
-            Ui.texto(spriteBatch, font, "Batidas: " + pista.getBatidas(), 3.2f, 2.3f, 2.5f, Align.left, 0.0165f, Color.WHITE, false);
-            Ui.texto(spriteBatch, font, "Clique para voltar ao menu", 0, 1.1f, largura, Align.center, 0.0135f, Ui.MUTED, false);
-            spriteBatch.end();
+        if (estadoAtual == Estado.RESULTADOS) {
+            telaResultados.draw(spriteBatch);
             return;
         }
 

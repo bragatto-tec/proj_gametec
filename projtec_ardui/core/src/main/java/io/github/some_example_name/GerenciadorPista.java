@@ -46,10 +46,10 @@ public class GerenciadorPista {
     private final TextureRegion[] quadrosMoeda;
 
     private final Array<ItemPista> itens = new Array<ItemPista>();
-    private final Rectangle hitboxCarro = new Rectangle();
     private float tempoParaProximo;
     private int moedas;
     private int batidas;
+    private int moedasPerdidas;
     private float velocidadeZ;
     private float spawnMin;
     private float spawnMax;
@@ -92,6 +92,7 @@ public class GerenciadorPista {
         itens.clear();
         moedas = 0;
         batidas = 0;
+        moedasPerdidas = 0;
         tempoParaProximo = 1.0f; // pequena folga antes do primeiro item
         setFase(1);
     }
@@ -105,13 +106,7 @@ public class GerenciadorPista {
         chanceMoeda = CHANCES_MOEDA[i];
     }
 
-    public void update(float dt, float carroX, float carroY, float carroLargura, float carroAltura) {
-        // hitbox do carro um pouco menor que o sprite, para a colisao nao parecer injusta
-        float mx = carroLargura * 0.15f;
-        float my = carroAltura * 0.12f;
-        hitboxCarro.set(carroX - carroLargura / 2f + mx, carroY + my,
-                carroLargura - 2f * mx, carroAltura - 2f * my);
-
+    public void update(float dt, Rectangle hitboxCarro) {
         tempoParaProximo -= dt;
         if (tempoParaProximo <= 0f) {
             spawnItem();
@@ -130,12 +125,15 @@ public class GerenciadorPista {
                 }
                 itens.removeIndex(i);
             } else if (item.saiuDaTela()) {
+                if (item.getTipo() == ItemPista.Tipo.MOEDA) {
+                    moedasPerdidas++;
+                }
                 itens.removeIndex(i); // saiu pela parte de baixo: libera memoria
             }
         }
     }
 
-    /** Sorteia a via (0, 1 ou 2) e o tipo (moeda 70% / cone 30%) e cria o item no horizonte. */
+    /** Sorteia a via (0, 1 ou 2) e o tipo (moeda ou cone, pela chanceMoeda da fase) e cria o item no horizonte. */
     public void spawnItem() {
         int via = MathUtils.random(0, NUM_VIAS - 1);
         ItemPista item;
@@ -162,6 +160,11 @@ public class GerenciadorPista {
 
     public int getBatidas() {
         return batidas;
+    }
+
+    /** Moedas que passaram pelo carro sem serem pegas. */
+    public int getMoedasPerdidas() {
+        return moedasPerdidas;
     }
 
     public void dispose() {

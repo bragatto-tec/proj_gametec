@@ -104,13 +104,7 @@ public class TelaPreparacao {
     }
 
     private String textoControles() {
-        if (modo == TelaSelecaoModo.VERTICAL) {
-            return "Dorsiflexão e flexão plantar: o carro sobe e desce na pista.";
-        }
-        if (modo == TelaSelecaoModo.HORIZONTAL) {
-            return "Inversão e eversão: o carro troca de faixa (esquerda e direita).";
-        }
-        return "Os dois eixos ao mesmo tempo, com mais controle.";
+        return "Inversão e eversão: incline o pé para os lados e o carro troca de faixa.";
     }
 
     public void draw(SpriteBatch batch) {
