@@ -50,7 +50,7 @@ Consulte o [cronograma do projeto](../CRONOGRAMA.md), com as etapas, prazos e st
 
 ## Conexão com o sensor
 
-Sem endereço configurado, o aplicativo procura o ESP32 em `192.168.4.1`, `rehabcar.local` e `esp32.local`. Como o firmware imprime no Serial Monitor o IP recebido pelo Wi-Fi, informar esse IP é o método mais confiável. Computador e placa precisam estar na mesma rede Wi-Fi:
+Sem endereço configurado, o aplicativo procura automaticamente o ESP32 pelo cabo USB e também em `192.168.4.1`, `rehabcar.local` e `esp32.local`, sem solicitar informações ao usuário. Se estiver em outra rede Wi-Fi, é possível informar o IP manualmente:
 
 ```powershell
 $env:SENSOR_BASE_URL = "http://192.168.1.50"

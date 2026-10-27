@@ -4,8 +4,6 @@ import com.badlogic.gdx.backends.lwjgl3.Lwjgl3Application;
 import com.badlogic.gdx.backends.lwjgl3.Lwjgl3ApplicationConfiguration;
 import io.github.some_example_name.Main;
 
-import javax.swing.JOptionPane;
-import java.awt.GraphicsEnvironment;
 import java.net.URI;
 import java.util.Locale;
 
@@ -23,7 +21,7 @@ public class Lwjgl3Launcher {
     /**
      * Endereço opcional do ESP32. Ordem: --sensor-url=..., -Dsensor.baseUrl, SENSOR_BASE_URL.
      * Se nada for informado devolve null e o SensorClient descobre sozinho
-     * (Wi-Fi "RehabCar" em 192.168.4.1, rehabcar.local, esp32.local).
+     * (USB e Wi-Fi "RehabCar" em 192.168.4.1, rehabcar.local, esp32.local).
      */
     private static String obterEnderecoSensor(String[] args) {
         String endereco = null;
@@ -40,9 +38,6 @@ public class Lwjgl3Launcher {
             endereco = System.getenv("SENSOR_BASE_URL");
         }
         if (endereco == null || endereco.trim().isEmpty()) {
-            endereco = solicitarEnderecoSensor();
-        }
-        if (endereco == null || endereco.trim().isEmpty()) {
             return null;
         }
         try {
@@ -50,37 +45,6 @@ public class Lwjgl3Launcher {
         } catch (IllegalArgumentException e) {
             System.err.println(e.getMessage() + " - usando descoberta automatica.");
             return null;
-        }
-    }
-
-    private static String solicitarEnderecoSensor() {
-        if (GraphicsEnvironment.isHeadless()) {
-            return null;
-        }
-        while (true) {
-            Object informado = JOptionPane.showInputDialog(
-                    null,
-                    "Digite o IP do ESP32 (Wi-Fi) ou a porta do cabo USB (ex.: COM5 ou /dev/ttyUSB0).\n"
-                            + "Deixe vazio ou cancele para a busca automatica (cabo USB e Wi-Fi).",
-                    "Conectar ao sensor",
-                    JOptionPane.QUESTION_MESSAGE,
-                    null,
-                    null,
-                    ""
-            );
-            if (informado == null || informado.toString().trim().isEmpty()) {
-                return null;
-            }
-            try {
-                return normalizarEndereco(informado.toString().trim());
-            } catch (IllegalArgumentException e) {
-                JOptionPane.showMessageDialog(
-                        null,
-                        "Endereco invalido. Informe um IP (192.168.1.50) ou uma porta USB (COM5).",
-                        "Endereco invalido",
-                        JOptionPane.ERROR_MESSAGE
-                );
-            }
         }
     }
 
