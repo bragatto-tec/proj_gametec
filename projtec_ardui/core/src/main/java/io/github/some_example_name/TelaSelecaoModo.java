@@ -2,8 +2,10 @@ package io.github.some_example_name;
 
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.Input;
+import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.g2d.BitmapFont;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
+import com.badlogic.gdx.math.Rectangle;
 import com.badlogic.gdx.math.Vector2;
 import com.badlogic.gdx.utils.Align;
 import com.badlogic.gdx.utils.viewport.FitViewport;
@@ -23,8 +25,12 @@ public class TelaSelecaoModo {
     private final ModeCard botaoCombinado;
     private final Button botaoVoltar;
     private final Button botaoSelecionar;
+    private final Rectangle area1Min;
+    private final Rectangle area2Min;
+    private final Rectangle area3Min;
 
     private int modoEscolhido;
+    private int duracaoSegundos;
     private boolean voltarSolicitado;
     private boolean selecionarSolicitado;
 
@@ -38,13 +44,18 @@ public class TelaSelecaoModo {
         this.botaoCombinado = new ModeCard(uiAssets, "combinado", 5.32f, 1.0f, 2.24f, 2.5f);
         this.botaoVoltar = new Button(uiAssets, "voltar", 1.0f, 0.2f, 2.5f, 0.6f);
         this.botaoSelecionar = new Button(uiAssets, "selecionar", 4.5f, 0.2f, 2.5f, 0.6f);
+        this.area1Min = new Rectangle(3.0f, 3.72f, 1.2f, 0.42f);
+        this.area2Min = new Rectangle(4.4f, 3.72f, 1.2f, 0.42f);
+        this.area3Min = new Rectangle(5.8f, 3.72f, 1.2f, 0.42f);
 
         this.modoEscolhido = NENHUM;
+        this.duracaoSegundos = 60;
         this.botaoSelecionar.setHabilitado(false);
     }
 
     public void abrir() {
         modoEscolhido = NENHUM;
+        duracaoSegundos = 60;
         atualizarSelecaoCards();
         voltarSolicitado = false;
         selecionarSolicitado = false;
@@ -82,6 +93,15 @@ public class TelaSelecaoModo {
                 atualizarSelecaoCards();
                 botaoSelecionar.setHabilitado(true);
             }
+            if (area1Min.contains(touchPos.x, touchPos.y)) {
+                duracaoSegundos = 60;
+            }
+            if (area2Min.contains(touchPos.x, touchPos.y)) {
+                duracaoSegundos = 120;
+            }
+            if (area3Min.contains(touchPos.x, touchPos.y)) {
+                duracaoSegundos = 180;
+            }
             if (botaoVoltar.foiClicado(touchPos.x, touchPos.y)) {
                 voltarSolicitado = true;
             }
@@ -101,6 +121,10 @@ public class TelaSelecaoModo {
 
     public int getModoEscolhido() {
         return modoEscolhido;
+    }
+
+    public int getDuracaoSegundos() {
+        return duracaoSegundos;
     }
 
     public String getNomeModo() {
@@ -129,7 +153,19 @@ public class TelaSelecaoModo {
         botaoVoltar.draw(batch);
         botaoSelecionar.draw(batch);
 
+        Ui.textoLinha(batch, font, "Duração da partida", 0.5f, 3.72f, 2.4f, 0.42f, Align.left, 0.0135f, Ui.MUTED);
+        desenharDuracao(batch, area1Min, 60);
+        desenharDuracao(batch, area2Min, 120);
+        desenharDuracao(batch, area3Min, 180);
+
         batch.end();
+    }
+
+    private void desenharDuracao(SpriteBatch batch, Rectangle area, int segundos) {
+        boolean escolhida = duracaoSegundos == segundos;
+        Ui.pilula(batch, escolhida, area.x, area.y, area.width, area.height);
+        Ui.textoLinha(batch, font, (segundos / 60) + " min", area.x, area.y, area.width, area.height,
+                Align.center, 0.015f, escolhida ? Ui.AMARELO : Color.WHITE);
     }
 
     private void atualizarSelecaoCards() {

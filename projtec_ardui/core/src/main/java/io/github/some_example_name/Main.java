@@ -3,6 +3,7 @@ package io.github.some_example_name;
 import com.badlogic.gdx.ApplicationListener;
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.Input;
+import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.g2d.BitmapFont;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
@@ -11,6 +12,7 @@ import com.badlogic.gdx.math.Vector2;
 import com.badlogic.gdx.utils.Align;
 import com.badlogic.gdx.utils.ScreenUtils;
 import com.badlogic.gdx.utils.viewport.FitViewport;
+import java.util.Locale;
 
 public class Main implements ApplicationListener {
     private final String sensorBaseUrl;
@@ -32,6 +34,13 @@ public class Main implements ApplicationListener {
     private static final float ANGULO_SAIDA_FAIXA = 3f;
     private static final float FILTRO_INCLINACAO_SEGUNDOS = 0.12f;
     private static final float RESPOSTA_DIRECAO = 12f;
+
+    // Regras da partida
+    private static final int MAX_BATIDAS = 3;
+    private static final int PONTOS_MOEDA = 10;
+    private static final int PONTOS_BATIDA = 5;
+    private static final int FASES = 3;
+    private static final float DURACAO_AVISO_FASE = 2f;
 
     private SpriteBatch spriteBatch;
     private FitViewport viewport;
@@ -55,6 +64,11 @@ public class Main implements ApplicationListener {
     private TelaPreparacao telaPreparacao;
     private TelaPausa telaPausa;
     private boolean recalibrandoDaPausa;
+    private int duracaoPartida = 60;
+    private float tempoRestante;
+    private int fase = 1;
+    private float tempoAviso;
+    private String motivoFim = "";
     private Estado estadoAtual;
 
     private Button botaoJogar;
@@ -141,7 +155,8 @@ public class Main implements ApplicationListener {
                 telaSelecaoModo.fechar();
             } else if (telaSelecaoModo.isSelecionarSolicitado()) {
                 Gdx.app.log("RehabCar", "Modo escolhido: " + telaSelecaoModo.getNomeModo());
-                telaPreparacao.abrir(telaSelecaoModo.getModoEscolhido(), telaSelecaoModo.getNomeModo());
+                duracaoPartida = telaSelecaoModo.getDuracaoSegundos();
+                telaPreparacao.abrir(telaSelecaoModo.getModoEscolhido(), telaSelecaoModo.getNomeModo(), duracaoPartida);
                 estadoAtual = Estado.PREPARACAO;
                 telaSelecaoModo.fechar();
             }
@@ -195,6 +210,13 @@ public class Main implements ApplicationListener {
             return;
         }
 
+        if (estadoAtual == Estado.FIM) {
+            if (Gdx.input.justTouched() || Gdx.input.isKeyJustPressed(Input.Keys.ESCAPE)) {
+                estadoAtual = Estado.MENU;
+            }
+            return;
+        }
+
         if (Gdx.input.justTouched()) {
             if (botaoJogar.foiClicado(touchPos.x, touchPos.y)) {
                 Gdx.app.log("RehabCar", "Jogar");
@@ -227,6 +249,10 @@ public class Main implements ApplicationListener {
     private void reiniciarPartida() {
         viaAtual = GerenciadorPista.VIA_CENTRO;
         inclinacaoInicializada = false;
+        tempoRestante = duracaoPartida;
+        fase = 1;
+        tempoAviso = DURACAO_AVISO_FASE;
+        motivoFim = "";
         tempoAnimacaoCarro = 0f;
         carroSprite = quadrosCarro[0][0];
         carroX = GerenciadorPista.xDaVia(viaAtual, 1f);
@@ -246,6 +272,39 @@ public class Main implements ApplicationListener {
             return GerenciadorPista.VIA_ESQUERDA;
         }
         return GerenciadorPista.VIA_CENTRO;
+    }
+
+    private int calcularPontos() {
+        int pontos = pista.getMoedas() * PONTOS_MOEDA - pista.getBatidas() * PONTOS_BATIDA;
+        return Math.max(0, pontos);
+    }
+
+    private void desenharPlacar() {
+        float largura = 1.9f;
+        float altura = 0.42f;
+        float xEsq = 0.15f;
+        float xDir = viewport.getWorldWidth() - 0.15f - largura;
+        float linha1 = viewport.getWorldHeight() - 0.15f - altura - 0.12f - altura;
+        float linha2 = linha1 - 0.12f - altura;
+
+        int totalSegundos = (int) Math.ceil(tempoRestante);
+        String tempo = String.format(Locale.ROOT, "Tempo  %02d:%02d", totalSegundos / 60, totalSegundos % 60);
+        int vidas = Math.max(0, MAX_BATIDAS - pista.getBatidas());
+
+        desenharPilula(xEsq, linha1, largura, altura, "Fase  " + fase + "/" + FASES, Color.WHITE);
+        desenharPilula(xEsq, linha2, largura, altura, "Pontos  " + calcularPontos(), Ui.AMARELO);
+        desenharPilula(xDir, linha1, largura, altura, tempo, tempoRestante <= 10f ? Ui.VERMELHO : Color.WHITE);
+        desenharPilula(xDir, linha2, largura, altura, "Vidas  " + vidas, vidas <= 1 ? Ui.VERMELHO : Color.WHITE);
+
+        if (tempoAviso > 0f) {
+            Ui.texto(spriteBatch, font, "FASE " + fase, 0, 3.0f, viewport.getWorldWidth(), Align.center,
+                    0.04f, Ui.AMARELO, false);
+        }
+    }
+
+    private void desenharPilula(float x, float y, float largura, float altura, String texto, Color cor) {
+        Ui.pilula(spriteBatch, false, x, y, largura, altura);
+        Ui.textoLinha(spriteBatch, font, texto, x, y, largura, altura, Align.center, 0.0165f, cor);
     }
 
     private void sairDaCalibracao() {
@@ -290,6 +349,31 @@ public class Main implements ApplicationListener {
             carroX += (alvoX - carroX) * pesoDirecao;
 
             pista.update(dt, carroX, CARRO_Y, CARRO_LARGURA, alturaDoCarro());
+
+            tempoRestante -= dt;
+            if (tempoAviso > 0f) {
+                tempoAviso -= dt;
+            }
+
+            float decorrido = duracaoPartida - tempoRestante;
+            int novaFase = 1 + (int) (FASES * decorrido / duracaoPartida);
+            if (novaFase > FASES) {
+                novaFase = FASES;
+            }
+            if (novaFase != fase) {
+                fase = novaFase;
+                pista.setFase(fase);
+                tempoAviso = DURACAO_AVISO_FASE;
+            }
+
+            if (pista.getBatidas() >= MAX_BATIDAS) {
+                motivoFim = "Você bateu " + MAX_BATIDAS + " vezes";
+                estadoAtual = Estado.FIM;
+            } else if (tempoRestante <= 0f) {
+                tempoRestante = 0f;
+                motivoFim = "Tempo esgotado";
+                estadoAtual = Estado.FIM;
+            }
         }
 
         if (estadoAtual == Estado.PREPARACAO) {
@@ -337,10 +421,28 @@ public class Main implements ApplicationListener {
                     CARRO_LARGURA, alturaDoCarro());
             Ui.hud(spriteBatch, font, viewport.getWorldWidth(), viewport.getWorldHeight(),
                     sensorClient.sensorPronto(), pista.getMoedas(), pista.getBatidas());
+            desenharPlacar();
             spriteBatch.end();
             if (estadoAtual == Estado.PAUSA) {
                 telaPausa.draw(spriteBatch);
             }
+            return;
+        }
+
+        if (estadoAtual == Estado.FIM) {
+            float largura = viewport.getWorldWidth();
+            spriteBatch.begin();
+            Ui.fundo(spriteBatch, largura, viewport.getWorldHeight());
+            Ui.texto(spriteBatch, font, "FIM DE PARTIDA", 0, 4.6f, largura, Align.center, 0.025f, Color.WHITE, false);
+            Ui.texto(spriteBatch, font, motivoFim, 0, 4.0f, largura, Align.center, 0.0165f, Ui.MUTED, false);
+            Ui.painel(spriteBatch, Ui.Estilo.NEUTRO, 2.0f, 1.65f, 4.0f, 1.9f);
+            Ui.texto(spriteBatch, font, "Pontos: " + calcularPontos(), 2.5f, 3.3f, 3.2f, Align.left, 0.02f, Ui.AMARELO, false);
+            spriteBatch.draw(Ui.moeda(), 2.5f, 2.45f, 0.5f, 0.5f);
+            Ui.texto(spriteBatch, font, "Moedas: " + pista.getMoedas(), 3.2f, 2.9f, 2.5f, Align.left, 0.0165f, Color.WHITE, false);
+            spriteBatch.draw(Ui.cone(), 2.5f, 1.85f, 0.5f, 0.5f);
+            Ui.texto(spriteBatch, font, "Batidas: " + pista.getBatidas(), 3.2f, 2.3f, 2.5f, Align.left, 0.0165f, Color.WHITE, false);
+            Ui.texto(spriteBatch, font, "Clique para voltar ao menu", 0, 1.1f, largura, Align.center, 0.0135f, Ui.MUTED, false);
+            spriteBatch.end();
             return;
         }
 

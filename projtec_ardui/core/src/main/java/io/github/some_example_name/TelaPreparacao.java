@@ -22,6 +22,7 @@ public class TelaPreparacao {
 
     private int modo;
     private String nomeModo;
+    private int duracaoSegundos;
     private boolean contando;
     private float tempoContagem;
     private boolean voltarSolicitado;
@@ -39,9 +40,10 @@ public class TelaPreparacao {
         this.nomeModo = "nenhum";
     }
 
-    public void abrir(int modo, String nomeModo) {
+    public void abrir(int modo, String nomeModo, int duracaoSegundos) {
         this.modo = modo;
         this.nomeModo = nomeModo;
+        this.duracaoSegundos = duracaoSegundos;
         contando = false;
         tempoContagem = DURACAO_CONTAGEM;
         voltarSolicitado = false;
@@ -121,8 +123,9 @@ public class TelaPreparacao {
         Ui.texto(batch, font, "PREPARAR PARTIDA", 0, 4.88f, largura, Align.center, 0.023f, Color.WHITE, false);
 
         // modo escolhido
-        Ui.pilula(batch, true, 2.4f, 4.0f, 3.2f, 0.42f);
-        Ui.textoLinha(batch, font, "Modo: " + nomeModo, 2.4f, 4.0f, 3.2f, 0.42f, Align.center, 0.0165f, Ui.AMARELO);
+        Ui.pilula(batch, true, 2.1f, 4.0f, 3.8f, 0.42f);
+        Ui.textoLinha(batch, font, "Modo: " + nomeModo + " - " + (duracaoSegundos / 60) + " min",
+                2.1f, 4.0f, 3.8f, 0.42f, Align.center, 0.0165f, Ui.AMARELO);
 
         // objetivo
         Ui.painel(batch, Ui.Estilo.NEUTRO, 0.5f, 2.72f, 7.0f, 1.1f);
