@@ -387,7 +387,7 @@ public class Main implements ApplicationListener {
         if (estadoAtual == Estado.JOGANDO) {
             rua.update(dt);
             if (sensorClient.sensorPronto()) {
-                float angulo = sensorClient.getAngX();
+                float angulo = sensorClient.getAngY();
                 carro.seguirInclinacao(angulo, dt);
                 usouSensor = true;
                 maiorInclinacaoDireita = Math.max(maiorInclinacaoDireita, angulo);

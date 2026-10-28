@@ -62,7 +62,7 @@ public class SensorClient {
     private static final long INTERVALO_BUSCA_SERIAL_MS = 4000L;
     private static final int TIMEOUT_DESCOBERTA_MS = 1500;
     private static final int TIMEOUT_NORMAL_MS = 2500;
-    private static final long INTERVALO_DADOS_MS = 250L;
+    private static final long INTERVALO_DADOS_MS = 100L;
     private static final long INTERVALO_CALIBRACAO_MS = 250L;
     private static final int FALHAS_PARA_DESCONECTAR = 4;
 
@@ -340,14 +340,12 @@ public class SensorClient {
             if (ehSerial(base)) {
                 String porta = descobrirSerial(base);
                 if (porta != null) {
-                    String payload = lerSerial("DADOS", TIMEOUT_SERIAL_MS);
-                    if (payload != null && processarDados(payload)) {
-                        baseAtiva = porta;
-                        falhasSeguidas = 0;
-                        conectado = true;
-                        return;
-                    }
-                    fecharSerial();
+                    // descobrirSerial ja validou e processou a primeira resposta DADOS
+                    // (ou a linha JSON espontanea emitida pelo ESP32 ao reiniciar).
+                    baseAtiva = porta;
+                    falhasSeguidas = 0;
+                    conectado = true;
+                    return;
                 }
                 if (tentados.length() > 0) tentados.append(", ");
                 tentados.append("USB");
@@ -596,17 +594,28 @@ public class SensorClient {
         String alvo = SERIAL_AUTO.equalsIgnoreCase(candidato)
                 ? null : candidato.substring(PREFIXO_SERIAL.length());
         try {
-            for (SerialPort porta : SerialPort.getCommPorts()) {
-                if (!rodando) return null;
-                String nome = porta.getSystemPortName();
-                if (alvo != null ? !alvo.equalsIgnoreCase(nome) : !portaProvavel(porta)) continue;
-                if (!abrirSerial(porta)) continue;
+            SerialPort[] portas = SerialPort.getCommPorts();
+            // Tenta primeiro as portas com descricoes tipicas de adaptadores USB;
+            // alguns drivers do ESP32, porem, aparecem apenas como "COMx".
+            int etapas = alvo == null ? 2 : 1;
+            for (int etapa = 0; etapa < etapas; etapa++) {
+                for (SerialPort porta : portas) {
+                    if (!rodando) return null;
+                    String nome = porta.getSystemPortName();
+                    if (alvo != null && !alvo.equalsIgnoreCase(nome)) continue;
+                    String descricao = (nome + " " + porta.getDescriptivePortName() + " "
+                            + porta.getPortDescription()).toLowerCase(Locale.ROOT);
+                    if (descricao.contains("bluetooth")) continue;
+                    boolean provavel = portaProvavel(porta);
+                    if (alvo == null && (etapa == 0 ? !provavel : provavel)) continue;
+                    if (!abrirSerial(porta)) continue;
 
-                String resposta = enviarComandoSerial("DADOS", TIMEOUT_DESCOBERTA_SERIAL_MS);
-                if (resposta != null && interpretarJson(resposta) != null) {
-                    return PREFIXO_SERIAL + nome;
+                    String resposta = enviarComandoSerial("DADOS", TIMEOUT_DESCOBERTA_SERIAL_MS);
+                    if (resposta != null && processarDados(resposta)) {
+                        return PREFIXO_SERIAL + nome;
+                    }
+                    fecharSerial();
                 }
-                fecharSerial();
             }
         } catch (LinkageError e) {
             serialIndisponivel = true;
@@ -644,6 +653,11 @@ public class SensorClient {
         porta.clearDTR();
         porta.clearRTS();
         portaSerial = porta;
+        try {
+            Thread.sleep(1500L);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
         return true;
     }
 
@@ -687,7 +701,17 @@ public class SensorClient {
             StringBuilder linha = new StringBuilder();
             byte[] buffer = new byte[128];
             while (rodando && System.currentTimeMillis() < limite) {
-                int lidos = porta.readBytes(buffer, buffer.length);
+                int lidos;
+                try {
+                    lidos = porta.readBytes(buffer, buffer.length);
+                } catch (Exception e) {
+                    // Algumas versoes/drivers lancam SerialPortTimeoutException apos
+                    // os 100 ms configurados para leitura; isso e uma pausa, nao
+                    // falha do ESP32. Continua ate o prazo total do comando.
+                    if ("com.fazecast.jSerialComm.SerialPortTimeoutException".equals(
+                            e.getClass().getName())) continue;
+                    throw e;
+                }
                 if (lidos < 0) throw new java.io.IOException("A porta serial foi desconectada.");
                 for (int i = 0; i < lidos; i++) {
                     char caractere = (char) (buffer[i] & 0xFF);
