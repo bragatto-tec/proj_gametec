@@ -1,8 +1,5 @@
 package io.github.some_example_name;
 
-import com.badlogic.gdx.graphics.g2d.SpriteBatch;
-import com.badlogic.gdx.math.Vector2;
-
 /** Clickable mode card with normal and selected artwork. */
 public final class ModeCard extends GameObject {
     private final UiAssets assets;
@@ -21,7 +18,5 @@ public final class ModeCard extends GameObject {
     }
 
     public boolean foiClicado(float x, float y) { return getBounds().contains(x, y); }
-    public void atualizarEstado(Vector2 ponteiroMundo) { /* Card artwork has only normal/selected states. */ }
     @Override public void update(float dt) { }
-    @Override public void draw(SpriteBatch batch) { super.draw(batch); }
 }

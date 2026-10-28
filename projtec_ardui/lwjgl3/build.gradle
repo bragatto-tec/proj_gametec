@@ -29,6 +29,9 @@ if (JavaVersion.current().isJava9Compatible()) {
 }
 
 dependencies {
+  // O launcher referencia Main, que implementa ApplicationListener do gdx.
+  // Declarar a API diretamente também a inclui no classpath de execução do desktop.
+  implementation "com.badlogicgames.gdx:gdx:$gdxVersion"
   implementation "com.badlogicgames.gdx:gdx-backend-lwjgl3:$gdxVersion"
   implementation "com.badlogicgames.gdx:gdx-platform:$gdxVersion:natives-desktop"
   implementation project(':core')

@@ -144,8 +144,7 @@ public class TelaCalibracao {
 
     private boolean nivelado() {
         return sensorClient.sensorPronto()
-                && Math.abs(sensorClient.getAngX()) < TOLERANCIA_NIVEL
-                && Math.abs(sensorClient.getAngY()) < TOLERANCIA_NIVEL;
+                && Math.abs(sensorClient.getAngX()) < TOLERANCIA_NIVEL;
     }
 
     private void desenharAlvo() {
@@ -179,8 +178,8 @@ public class TelaCalibracao {
         shapeRenderer.end();
 
         // ponto (limitado ao disco)
-        float dx = (sensorClient.getAngY() / 45f) * raio * 0.85f;
-        float dy = (sensorClient.getAngX() / 45f) * raio * 0.85f;
+        float dx = (sensorClient.getAngX() / 45f) * raio * 0.85f;
+        float dy = 0f;
         float dist = (float) Math.sqrt(dx * dx + dy * dy);
         float maximo = raio * 0.95f;
         if (dist > maximo) {
@@ -200,18 +199,17 @@ public class TelaCalibracao {
         float x = 4.32f;
         float largura = 3.06f;
         float[] topos = {2.8f, 2.42f, 2.04f};
-        String[] rotulos = {"Inclinação X", "Inclinação Y", "Temperatura"};
+        String[] rotulos = {"Inclinação X", "Temperatura"};
         String[] valores = {
                 String.format(Locale.ROOT, "%.1f°", sensorClient.getAngX()),
-                String.format(Locale.ROOT, "%.1f°", sensorClient.getAngY()),
                 String.format(Locale.ROOT, "%.1f °C", sensorClient.getTemp())};
-        for (int i = 0; i < 3; i++) {
-            boolean angulo = i < 2;
-            float ang = i == 0 ? sensorClient.getAngX() : sensorClient.getAngY();
+        for (int i = 0; i < 2; i++) {
+            boolean angulo = i == 0;
+            float ang = sensorClient.getAngX();
             Color corValor = angulo && sensorClient.sensorPronto() && Math.abs(ang) < TOLERANCIA_NIVEL ? Ui.VERDE : Color.WHITE;
             Ui.textoLinha(batch, font, rotulos[i], x, topos[i] - 0.36f, largura, 0.4f, Align.left, 0.0135f, Ui.MUTED);
             Ui.textoLinha(batch, font, valores[i], x, topos[i] - 0.36f, largura, 0.4f, Align.right, 0.02f, corValor);
-            if (i < 2) {
+            if (i == 0) {
                 Ui.retangulo(batch, x, topos[i] - 0.35f, largura, 0.012f, new Color(0.79f, 0.84f, 0.94f, 0.18f));
             }
         }

@@ -69,7 +69,6 @@ public class SensorClient {
     private volatile boolean rodando = true;
     private volatile int progresso;
     private volatile float angX;
-    private volatile float angY;
     private volatile float temp;
     private volatile String mensagemErro = "";
     private int falhasProgressoCalibracao;
@@ -140,7 +139,6 @@ public class SensorClient {
     public boolean calibracaoConcluidaComSucesso() { return calibracaoConcluida; }
     public int getProgresso()   { return progresso; }
     public float getAngX()      { return angX; }
-    public float getAngY()      { return angY; }
     public float getTemp()      { return temp; }
     public String getMensagemErro() { return mensagemErro; }
 
@@ -287,10 +285,9 @@ public class SensorClient {
         JsonValue dados = interpretarJson(payload);
         if (dados == null) { sensorPronto = false; return; }
 
-        Float leituraX = extrairNumero(dados, "angX");
         Float leituraY = extrairNumero(dados, "angY");
-        if (leituraX == null || leituraY == null) {
-            mensagemErro = "A resposta do ESP32 precisa conter angX e angY numericos.";
+        if (leituraY == null) {
+            mensagemErro = "A resposta do ESP32 precisa conter angY numerico.";
             sensorPronto = false;
             return;
         }
@@ -300,9 +297,8 @@ public class SensorClient {
             sensorPronto = false;
             return;
         }
-        // A montagem atual do MPU6050 usa os eixos trocados em relação ao jogo.
+        // O eixo Y fisico do MPU6050 corresponde ao eixo X usado pelo jogo.
         angX = leituraY;
-        angY = leituraX;
         if (dados.has("temp")) {
             Float t = extrairNumero(dados, "temp");
             if (t != null) temp = t;
@@ -592,6 +588,6 @@ public class SensorClient {
     private static boolean respostaSerialValida(String l, String comando) {
         if ("CALIBRAR".equals(comando)) return l.equalsIgnoreCase("OK");
         if (!l.startsWith("{")) return false;
-        return l.contains("PROGRESSO".equals(comando) ? "\"progresso\"" : "\"angX\"");
+        return l.contains("PROGRESSO".equals(comando) ? "\"progresso\"" : "\"angY\"");
     }
 }

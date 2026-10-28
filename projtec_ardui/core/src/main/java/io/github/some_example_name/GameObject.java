@@ -25,7 +25,7 @@ public abstract class GameObject {
     }
 
     public Rectangle getBounds() {
-        bounds.setPosition(sprite.getX(), sprite.getY());
+        bounds.set(sprite.getX(), sprite.getY(), sprite.getWidth(), sprite.getHeight());
         return bounds;
     }
 
