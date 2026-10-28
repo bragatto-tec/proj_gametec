@@ -58,6 +58,7 @@ public class SensorClient {
     private static final int BAUD_SERIAL = 115200;
     private static final int TIMEOUT_SERIAL_MS = 1200;
     private static final int TIMEOUT_DESCOBERTA_SERIAL_MS = 5000;
+    private static final long TIMEOUT_PEDIDO_WIFI_MS = 30000L;
     private static final long INTERVALO_BUSCA_SERIAL_MS = 4000L;
     private static final int TIMEOUT_DESCOBERTA_MS = 1500;
     private static final int TIMEOUT_NORMAL_MS = 2500;
@@ -229,14 +230,14 @@ public class SensorClient {
      * fora da thread de renderização.
      */
     public CompletableFuture<Boolean> setWifiCredentials(String ssid, String password) {
-        if (ssid == null || ssid.trim().isEmpty() || password == null || password.isEmpty()) {
-            return rejeitarPedidoWifi("Informe o SSID e a senha da rede Wi-Fi.");
+        if (ssid == null || ssid.trim().isEmpty() || password == null) {
+            return rejeitarPedidoWifi("Informe o SSID da rede Wi-Fi.");
         }
         if (campoWifiInvalido(ssid) || campoWifiInvalido(password)) {
             return rejeitarPedidoWifi("SSID e senha não podem conter ':' ou quebra de linha.");
         }
         if (!rodando) return rejeitarPedidoWifi("O cliente do sensor foi encerrado.");
-        if (!viaCabo()) {
+        if (connectionMode == ConnectionMode.WIFI || (baseAtiva != null && !viaCabo())) {
             return rejeitarPedidoWifi("Conecte o ESP32 por USB antes de alterar o Wi-Fi.");
         }
 
@@ -244,7 +245,9 @@ public class SensorClient {
         if (!pedidoWifiPendente.compareAndSet(null, request)) {
             return rejeitarPedidoWifi("Já existe uma alteração de Wi-Fi em andamento.");
         }
-        statusWifi = "Enviando credenciais ao ESP32...";
+        statusWifi = viaCabo()
+                ? "Enviando credenciais ao ESP32..."
+                : "Aguardando a conexão serial com o ESP32...";
         return request.resultado;
     }
 
@@ -402,16 +405,16 @@ public class SensorClient {
             sensorPronto = false;
             return false;
         }
-        if (!estadoSensor.asBoolean()) {
-            mensagemErro = "ESP32 conectado, mas o MPU6050 não está fornecendo leituras.";
-            sensorPronto = false;
-            return false;
-        }
         angX = leituraX;
         angY = leituraY;
         temp = temperatura;
-        sensorPronto = true;
-        if (!calibracaoFalhou) mensagemErro = "";
+        sensorPronto = estadoSensor.asBoolean();
+        if (!sensorPronto) {
+            mensagemErro = "ESP32 conectado, mas o MPU6050 não está fornecendo leituras.";
+        } else if (!calibracaoFalhou) {
+            mensagemErro = "";
+        }
+        // A resposta válida confirma o transporte mesmo quando o MPU está ausente.
         return true;
     }
 
@@ -493,21 +496,28 @@ public class SensorClient {
         WifiRequest request = pedidoWifiPendente.get();
         if (request == null) return;
 
+        if (!viaCabo() || portaSerial == null || !portaSerial.isOpen()) {
+            if (System.currentTimeMillis() - request.criadoEm >= TIMEOUT_PEDIDO_WIFI_MS) {
+                statusWifi = "Falha: não foi possível localizar uma porta USB serial do ESP32.";
+                pedidoWifiPendente.compareAndSet(request, null);
+                request.resultado.complete(Boolean.FALSE);
+            } else {
+                statusWifi = "Aguardando a conexão serial com o ESP32...";
+            }
+            return;
+        }
+
         boolean sucesso = false;
         try {
-            if (!viaCabo() || portaSerial == null || !portaSerial.isOpen()) {
-                statusWifi = "Falha: a porta serial do ESP32 não está aberta.";
+            String comando = "SETWIFI:" + request.ssid + ":" + request.password;
+            String resposta = enviarComandoSerial(comando, TIMEOUT_SERIAL_MS);
+            if (resposta == null) {
+                statusWifi = "Falha ao configurar o Wi-Fi: " + mensagemErro;
+            } else if ("OK WIFI ATUALIZADO".equalsIgnoreCase(resposta.trim())) {
+                statusWifi = "Wi-Fi atualizado com sucesso.";
+                sucesso = true;
             } else {
-                String comando = "SETWIFI:" + request.ssid + ":" + request.password;
-                String resposta = enviarComandoSerial(comando, TIMEOUT_SERIAL_MS);
-                if (resposta == null) {
-                    statusWifi = "Falha ao configurar o Wi-Fi: " + mensagemErro;
-                } else if ("OK WIFI ATUALIZADO".equalsIgnoreCase(resposta.trim())) {
-                    statusWifi = "Wi-Fi atualizado com sucesso.";
-                    sucesso = true;
-                } else {
-                    statusWifi = "ESP32 recusou a configuração: " + resposta.trim();
-                }
+                statusWifi = "ESP32 recusou a configuração: " + resposta.trim();
             }
         } catch (RuntimeException e) {
             statusWifi = "Erro de comunicação ao configurar o Wi-Fi: " + e.getMessage();
@@ -737,6 +747,7 @@ public class SensorClient {
         private final String ssid;
         private final String password;
         private final CompletableFuture<Boolean> resultado = new CompletableFuture<Boolean>();
+        private final long criadoEm = System.currentTimeMillis();
 
         private WifiRequest(String ssid, String password) {
             this.ssid = ssid;
