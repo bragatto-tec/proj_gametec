@@ -9,31 +9,45 @@ import java.net.URL;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.atomic.AtomicReference;
 
 import com.badlogic.gdx.utils.JsonReader;
 import com.badlogic.gdx.utils.JsonValue;
 import com.fazecast.jSerialComm.SerialPort;
 
 /**
- * Cliente HTTP do ESP32 + MPU6050.
+ * Cliente do ESP32 + MPU6050, com transporte USB serial ou HTTP.
  *
- * Roda numa thread própria (nunca trava o render). Aceita DUAS formas de ligação:
- *   - CABO USB (porta serial, 115200 baud, protocolo de linhas: DADOS / PROGRESSO / CALIBRAR)
- *   - Wi-Fi (HTTP: /api/dados, /api/calibrar, /api/progresso)
- *
- * Se nenhum endereço for informado, descobre sozinho o ESP32 testando, em ordem:
- *   1) o endereço configurado (--sensor-url / -Dsensor.baseUrl / SENSOR_BASE_URL);
- *      aceita "serial:auto", "serial:COM5", "serial:/dev/ttyUSB0" ou um IP/URL
- *   2) serial:auto            -> cabo USB (procura portas USB-serial e valida a resposta)
- *   3) http://192.168.4.1     -> Wi-Fi próprio do ESP32 ("RehabCar"), IP sempre fixo
- *   4) http://rehabcar.local  -> mDNS, quando o ESP32 está na mesma rede do PC
- *   5) http://esp32.local     -> nome antigo
+ * Toda leitura, calibração e escrita serial/HTTP acontece na thread de trabalho.
+ * Os métodos chamados pela renderização somente consultam snapshots ou enfileiram
+ * operações, sem aguardar operações de entrada/saída.
  */
 public class SensorClient {
 
+    public enum ConnectionMode {
+        AUTO,
+        SERIAL,
+        WIFI
+    }
+
+    /** Snapshot imutável da última telemetria recebida; consultar não bloqueia. */
+    public static final class SensorData {
+        public final float angX;
+        public final float angY;
+        public final float temp;
+        public final boolean ok;
+
+        private SensorData(float angX, float angY, float temp, boolean ok) {
+            this.angX = angX;
+            this.angY = angY;
+            this.temp = temp;
+            this.ok = ok;
+        }
+    }
+
     private static final String PREFIXO_SERIAL = "serial:";
     private static final String SERIAL_AUTO = "serial:auto";
-
     private static final String[] PADROES = {
         SERIAL_AUTO,
         "http://192.168.4.1",
@@ -41,21 +55,20 @@ public class SensorClient {
         "http://esp32.local"
     };
 
+    private static final int BAUD_SERIAL = 115200;
+    private static final int TIMEOUT_SERIAL_MS = 1200;
+    private static final int TIMEOUT_DESCOBERTA_SERIAL_MS = 5000;
+    private static final long INTERVALO_BUSCA_SERIAL_MS = 4000L;
     private static final int TIMEOUT_DESCOBERTA_MS = 1500;
     private static final int TIMEOUT_NORMAL_MS = 2500;
-    private static final long INTERVALO_DADOS_MS = 250L;       // 4 leituras/s para evitar sobrecarregar o WebServer
+    private static final long INTERVALO_DADOS_MS = 250L;
     private static final long INTERVALO_CALIBRACAO_MS = 250L;
     private static final int FALHAS_PARA_DESCONECTAR = 4;
 
-    // --- USB / serial ---
-    private static final int BAUD_SERIAL = 115200;                 // igual ao Serial.begin do firmware
-    private static final int TIMEOUT_SERIAL_MS = 1000;
-    private static final int TIMEOUT_SERIAL_DESCOBERTA_MS = 3500; // inclui o tempo do ESP32 reiniciar ao abrir a porta
-    private static final long INTERVALO_BUSCA_SERIAL_MS = 4000L;  // nao reabrir portas toda hora (reseta o ESP32)
-    private static final long INTERVALO_DADOS_SERIAL_MS = 50L;    // 20 leituras/s pelo cabo
-    private static final long INTERVALO_CALIBRACAO_SERIAL_MS = 100L;
-
     private final List<String> candidatos = new ArrayList<String>();
+    private final ConnectionMode connectionMode;
+    private final AtomicReference<WifiRequest> pedidoWifiPendente =
+            new AtomicReference<WifiRequest>();
     private volatile String baseAtiva;           // null = ainda procurando
     private int falhasSeguidas = 0;              // só usada na thread de rede
 
@@ -69,29 +82,47 @@ public class SensorClient {
     private volatile boolean rodando = true;
     private volatile int progresso;
     private volatile float angX;
+    private volatile float angY;
     private volatile float temp;
     private volatile String mensagemErro = "";
+    private volatile String statusWifi = "";
     private int falhasProgressoCalibracao;
-
-    // Só usados na thread de rede
     private SerialPort portaSerial;
     private long ultimaBuscaSerial;
-    private boolean serialIndisponivel;          // biblioteca nativa não carregou -> só Wi-Fi
+    private boolean serialIndisponivel;
 
     /** Descoberta automática (aceita override por propriedade/variável de ambiente). */
     public SensorClient() {
-        this(urlBaseConfiguravel());
+        this(ConnectionMode.AUTO, urlBaseConfiguravel());
     }
 
     /** Endereços a tentar, em ordem. null/vazio são ignorados; os padrões entram no fim. */
     public SensorClient(String... bases) {
+        this(ConnectionMode.AUTO, bases);
+    }
+
+    /**
+     * Seleciona o transporte. Em SERIAL, informe opcionalmente "serial:auto",
+     * "COM5" ou "/dev/ttyUSB0"; em WIFI, informe IP, hostname ou URL.
+     * AUTO mantém a descoberta serial seguida dos endereços Wi-Fi padrão.
+     */
+    public SensorClient(ConnectionMode mode, String... bases) {
+        if (mode == null) throw new IllegalArgumentException("O modo de conexão não pode ser nulo.");
+        this.connectionMode = mode;
         if (bases != null) {
             for (String b : bases) {
                 adicionarCandidato(b);
             }
         }
         for (String p : PADROES) {
-            adicionarCandidato(p);
+            if (mode == ConnectionMode.AUTO
+                    || (mode == ConnectionMode.SERIAL && ehSerial(p))
+                    || (mode == ConnectionMode.WIFI && !ehSerial(p))) {
+                adicionarCandidato(p);
+            }
+        }
+        if (mode == ConnectionMode.SERIAL && candidatos.isEmpty()) {
+            adicionarCandidato(SERIAL_AUTO);
         }
     }
 
@@ -99,14 +130,31 @@ public class SensorClient {
         if (base == null) return;
         String url = base.trim();
         if (url.isEmpty()) return;
-        if (url.toLowerCase(Locale.ROOT).startsWith(PREFIXO_SERIAL)) {
+        if (ehNomePortaSerial(url)) url = PREFIXO_SERIAL + url;
+        if (url.regionMatches(true, 0, PREFIXO_SERIAL, 0, PREFIXO_SERIAL.length())) {
             String porta = url.substring(PREFIXO_SERIAL.length()).trim();
-            url = porta.isEmpty() || porta.equalsIgnoreCase("auto") ? SERIAL_AUTO : PREFIXO_SERIAL + porta;
+            url = porta.isEmpty() || "auto".equalsIgnoreCase(porta)
+                    ? SERIAL_AUTO : PREFIXO_SERIAL + porta;
         } else {
-            if (!url.contains("://")) url = "http://" + url;   // "192.168.1.50" -> "http://192.168.1.50"
+            if (connectionMode == ConnectionMode.SERIAL) {
+                throw new IllegalArgumentException("Endereço incompatível com SERIAL: " + url);
+            }
+            if (!url.contains("://")) url = "http://" + url;
             while (url.endsWith("/")) url = url.substring(0, url.length() - 1);
         }
+        if (connectionMode == ConnectionMode.WIFI && ehSerial(url)) {
+            throw new IllegalArgumentException("Endereço serial incompatível com WIFI: " + url);
+        }
         if (!candidatos.contains(url)) candidatos.add(url);
+    }
+
+    private static boolean ehNomePortaSerial(String valor) {
+        String lower = valor.toLowerCase(Locale.ROOT);
+        return lower.matches("com\\d+") || lower.startsWith("/dev/tty");
+    }
+
+    private static boolean ehSerial(String base) {
+        return base != null && base.startsWith(PREFIXO_SERIAL);
     }
 
     private static String urlBaseConfiguravel() {
@@ -138,9 +186,28 @@ public class SensorClient {
     public boolean calibracaoFalhou() { return calibracaoFalhou; }
     public boolean calibracaoConcluidaComSucesso() { return calibracaoConcluida; }
     public int getProgresso()   { return progresso; }
+    public int obterProgressoCalibracao() { return progresso; }
     public float getAngX()      { return angX; }
+    public float getAngY()      { return angY; }
     public float getTemp()      { return temp; }
     public String getMensagemErro() { return mensagemErro; }
+    public String getStatusWifi() { return statusWifi; }
+
+    /**
+     * Retorna imediatamente a última telemetria completa recebida pela thread
+     * de comunicação. Antes da primeira resposta, {@code ok} é false.
+     */
+    public SensorData obterDados() {
+        return new SensorData(angX, angY, temp, sensorPronto);
+    }
+
+    public ConnectionMode getConnectionMode() {
+        return connectionMode;
+    }
+
+    public boolean viaCabo() {
+        return ehSerial(baseAtiva);
+    }
 
     /** Endereço do ESP32 que está respondendo (ou "" se ainda não achou). */
     public String getUrlAtual() {
@@ -148,26 +215,57 @@ public class SensorClient {
         return b == null ? "" : b;
     }
 
-    /** "USB (COM5)" ou "192.168.4.1" - texto curto para mostrar na tela. */
+    /** Endereço curto para a interface, por exemplo USB (COM5) ou 192.168.4.1. */
     public String getEnderecoAmigavel() {
-        String b = baseAtiva;
-        if (b == null) return "";
-        if (ehSerial(b)) return "USB (" + b.substring(PREFIXO_SERIAL.length()) + ")";
-        return b.replace("http://", "");
+        String base = baseAtiva;
+        if (base == null) return "";
+        return ehSerial(base) ? "USB (" + base.substring(PREFIXO_SERIAL.length()) + ")"
+                : base.replace("http://", "");
     }
 
-    /** true se a conexão ativa é o cabo USB. */
-    public boolean viaCabo() {
-        String b = baseAtiva;
-        return b != null && ehSerial(b);
+    /**
+     * Enfileira SETWIFI e completa o future quando o ESP32 responder.
+     * O future não bloqueia o chamador; aguardar seu resultado deve ser feito
+     * fora da thread de renderização.
+     */
+    public CompletableFuture<Boolean> setWifiCredentials(String ssid, String password) {
+        if (ssid == null || ssid.trim().isEmpty() || password == null || password.isEmpty()) {
+            return rejeitarPedidoWifi("Informe o SSID e a senha da rede Wi-Fi.");
+        }
+        if (campoWifiInvalido(ssid) || campoWifiInvalido(password)) {
+            return rejeitarPedidoWifi("SSID e senha não podem conter ':' ou quebra de linha.");
+        }
+        if (!rodando) return rejeitarPedidoWifi("O cliente do sensor foi encerrado.");
+        if (!viaCabo()) {
+            return rejeitarPedidoWifi("Conecte o ESP32 por USB antes de alterar o Wi-Fi.");
+        }
+
+        WifiRequest request = new WifiRequest(ssid, password);
+        if (!pedidoWifiPendente.compareAndSet(null, request)) {
+            return rejeitarPedidoWifi("Já existe uma alteração de Wi-Fi em andamento.");
+        }
+        statusWifi = "Enviando credenciais ao ESP32...";
+        return request.resultado;
     }
 
-    private static boolean ehSerial(String base) {
-        return base != null && base.startsWith(PREFIXO_SERIAL);
+    private CompletableFuture<Boolean> rejeitarPedidoWifi(String motivo) {
+        statusWifi = motivo;
+        CompletableFuture<Boolean> resultado = new CompletableFuture<Boolean>();
+        resultado.complete(Boolean.FALSE);
+        return resultado;
+    }
+
+    private static boolean campoWifiInvalido(String valor) {
+        return valor.indexOf(':') >= 0 || valor.indexOf('\n') >= 0 || valor.indexOf('\r') >= 0;
     }
 
     public void iniciarCalibracao() {
-        if (!sensorPronto || emCalibracao) return;
+        solicitarCalibracao();
+    }
+
+    /** Agenda a calibração pelo transporte ativo, sem bloquear a interface. */
+    public boolean solicitarCalibracao() {
+        if (!sensorPronto || emCalibracao) return false;
         calibracaoFalhou = false;
         calibracaoConcluida = false;
         progresso = 0;
@@ -175,6 +273,7 @@ public class SensorClient {
         falhasProgressoCalibracao = 0;
         mensagemErro = "";
         emCalibracao = true;
+        return true;
     }
 
     /** Apaga o resultado da última calibração (chamar ao abrir a tela). */
@@ -194,36 +293,43 @@ public class SensorClient {
     // Thread de rede
     // ------------------------------------------------------------------
     private void executarComunicacao() {
-        while (rodando) {
-            long inicio = System.currentTimeMillis();
-            try {
-                if (baseAtiva == null) {
-                    descobrir();
-                } else if (emCalibracao) {
-                    atualizarCalibracao();
-                } else {
-                    atualizarDados();
+        try {
+            while (rodando) {
+                long inicio = System.currentTimeMillis();
+                try {
+                    processarPedidoWifi();
+                    if (baseAtiva == null) {
+                        descobrir();
+                    } else if (emCalibracao) {
+                        atualizarCalibracao();
+                    } else {
+                        atualizarDados();
+                    }
+                } catch (RuntimeException e) {
+                    mensagemErro = "Erro inesperado na comunicação com o ESP32: " + e.getMessage();
                 }
-            } catch (RuntimeException e) {
-                mensagemErro = "Erro inesperado: " + e;
-            }
 
-            long intervalo = viaCabo()
-                ? (emCalibracao ? INTERVALO_CALIBRACAO_SERIAL_MS : INTERVALO_DADOS_SERIAL_MS)
-                : (emCalibracao ? INTERVALO_CALIBRACAO_MS : INTERVALO_DADOS_MS);
-            long espera = intervalo - (System.currentTimeMillis() - inicio);
-            if (baseAtiva == null) espera = Math.max(espera, 300L);  // não martelar a rede enquanto procura
-            try {
-                if (espera > 0) Thread.sleep(espera);
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                rodando = false;
+                long intervalo = emCalibracao ? INTERVALO_CALIBRACAO_MS : INTERVALO_DADOS_MS;
+                long espera = intervalo - (System.currentTimeMillis() - inicio);
+                if (baseAtiva == null) espera = Math.max(espera, 300L);
+                try {
+                    if (espera > 0) Thread.sleep(espera);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    rodando = false;
+                }
+            }
+        } finally {
+            fecharSerial();
+            WifiRequest pendente = pedidoWifiPendente.getAndSet(null);
+            if (pendente != null) {
+                statusWifi = "Cliente encerrado antes do envio das credenciais.";
+                pendente.resultado.complete(Boolean.FALSE);
             }
         }
-        fecharSerial();
     }
 
-    /** Testa cada endereço candidato até algum responder /api/dados com JSON válido. */
+    /** Testa os endereços configurados até o ESP32 responder com telemetria válida. */
     private void descobrir() {
         StringBuilder tentados = new StringBuilder();
         for (String base : candidatos) {
@@ -231,28 +337,24 @@ public class SensorClient {
             if (ehSerial(base)) {
                 String porta = descobrirSerial(base);
                 if (porta != null) {
-                    String payload = lerPayload(porta, "/api/dados", TIMEOUT_SERIAL_MS);
-                    if (payload != null && interpretarJson(payload) != null) {
+                    String payload = lerSerial("DADOS", TIMEOUT_SERIAL_MS);
+                    if (payload != null && processarDados(payload)) {
                         baseAtiva = porta;
                         falhasSeguidas = 0;
                         conectado = true;
-                        processarDados(payload);
                         return;
                     }
                     fecharSerial();
                 }
-                if (!serialIndisponivel) {
-                    if (tentados.length() > 0) tentados.append(", ");
-                    tentados.append("USB");
-                }
+                if (tentados.length() > 0) tentados.append(", ");
+                tentados.append("USB");
                 continue;
             }
             String payload = lerPayload(base, "/api/dados", TIMEOUT_DESCOBERTA_MS);
-            if (payload != null && interpretarJson(payload) != null) {
+            if (payload != null && processarDados(payload)) {
                 baseAtiva = base;
                 falhasSeguidas = 0;
                 conectado = true;
-                processarDados(payload);
                 return;
             }
             if (tentados.length() > 0) tentados.append(", ");
@@ -260,55 +362,62 @@ public class SensorClient {
         }
         conectado = false;
         sensorPronto = false;
-        mensagemErro = "ESP32 nao encontrado (tentei " + tentados + "). "
-            + "Ligue o cabo USB, conecte o PC ao Wi-Fi \"RehabCar\" ou use --sensor-url=IP";
+        mensagemErro = "ESP32 não encontrado (tentativas: " + tentados + "). "
+                + (connectionMode == ConnectionMode.SERIAL
+                ? "Verifique o cabo USB e a porta serial."
+                : "Conecte ao Wi-Fi \"RehabCar\" ou informe --sensor-url=IP.");
     }
 
     private void atualizarDados() {
-        String payload = lerPayload(baseAtiva, "/api/dados", TIMEOUT_NORMAL_MS);
-        if (payload == null) {
+        String payload = viaCabo()
+                ? lerSerial("DADOS", TIMEOUT_SERIAL_MS)
+                : lerPayload(baseAtiva, "/api/dados", TIMEOUT_NORMAL_MS);
+        if (payload == null || !processarDados(payload)) {
             if (++falhasSeguidas >= FALHAS_PARA_DESCONECTAR) {
                 conectado = false;
                 sensorPronto = false;
-                baseAtiva = null;          // volta a procurar (o IP pode ter mudado / cabo solto)
+                baseAtiva = null;
                 fecharSerial();
             }
             return;
         }
         falhasSeguidas = 0;
         conectado = true;
-        processarDados(payload);
     }
 
-    private void processarDados(String payload) {
-        if (!calibracaoFalhou) mensagemErro = "";
+    private boolean processarDados(String payload) {
         JsonValue dados = interpretarJson(payload);
-        if (dados == null) { sensorPronto = false; return; }
+        if (dados == null) {
+            sensorPronto = false;
+            return false;
+        }
 
+        Float leituraX = extrairNumero(dados, "angX");
         Float leituraY = extrairNumero(dados, "angY");
-        if (leituraY == null) {
-            mensagemErro = "A resposta do ESP32 precisa conter angY numerico.";
-            sensorPronto = false;
-            return;
-        }
+        Float temperatura = extrairNumero(dados, "temp");
         JsonValue estadoSensor = dados.get("ok");
-        if (estadoSensor != null && (!estadoSensor.isBoolean() || !estadoSensor.asBoolean())) {
-            mensagemErro = "ESP32 conectado, mas o MPU6050 nao esta fornecendo leituras.";
+        if (leituraX == null || leituraY == null || temperatura == null
+                || estadoSensor == null || !estadoSensor.isBoolean()) {
+            mensagemErro = "A resposta do ESP32 precisa conter angX, angY, temp e ok válidos.";
             sensorPronto = false;
-            return;
+            return false;
         }
-        // O eixo Y fisico do MPU6050 corresponde ao eixo X usado pelo jogo.
-        angX = leituraY;
-        if (dados.has("temp")) {
-            Float t = extrairNumero(dados, "temp");
-            if (t != null) temp = t;
+        if (!estadoSensor.asBoolean()) {
+            mensagemErro = "ESP32 conectado, mas o MPU6050 não está fornecendo leituras.";
+            sensorPronto = false;
+            return false;
         }
+        angX = leituraX;
+        angY = leituraY;
+        temp = temperatura;
         sensorPronto = true;
+        if (!calibracaoFalhou) mensagemErro = "";
+        return true;
     }
 
     private void atualizarCalibracao() {
         if (!pedidoCalibracaoEnviado) {
-            String resposta = lerPayload(baseAtiva, "/api/calibrar", TIMEOUT_NORMAL_MS);
+            String resposta = consultar("/api/calibrar");
             if (resposta == null) {
                 falharCalibracao("Nao foi possivel iniciar a calibracao: " + mensagemErro);
                 return;
@@ -321,7 +430,7 @@ public class SensorClient {
             falhasProgressoCalibracao = 0;
         }
 
-        String payload = lerPayload(baseAtiva, "/api/progresso", TIMEOUT_NORMAL_MS);
+        String payload = consultar("/api/progresso");
         if (payload == null || payload.trim().isEmpty()) {
             falhaTemporariaProgresso(payload == null ? mensagemErro : "resposta vazia");
             return;
@@ -369,6 +478,45 @@ public class SensorClient {
         sensorPronto = false;
     }
 
+    private String consultar(String endpoint) {
+        return viaCabo() ? lerSerial(comandoParaEndpoint(endpoint), TIMEOUT_SERIAL_MS)
+                : lerPayload(baseAtiva, endpoint, TIMEOUT_NORMAL_MS);
+    }
+
+    private static String comandoParaEndpoint(String endpoint) {
+        if ("/api/calibrar".equals(endpoint)) return "CALIBRAR";
+        if ("/api/progresso".equals(endpoint)) return "PROGRESSO";
+        return "DADOS";
+    }
+
+    private void processarPedidoWifi() {
+        WifiRequest request = pedidoWifiPendente.get();
+        if (request == null) return;
+
+        boolean sucesso = false;
+        try {
+            if (!viaCabo() || portaSerial == null || !portaSerial.isOpen()) {
+                statusWifi = "Falha: a porta serial do ESP32 não está aberta.";
+            } else {
+                String comando = "SETWIFI:" + request.ssid + ":" + request.password;
+                String resposta = enviarComandoSerial(comando, TIMEOUT_SERIAL_MS);
+                if (resposta == null) {
+                    statusWifi = "Falha ao configurar o Wi-Fi: " + mensagemErro;
+                } else if ("OK WIFI ATUALIZADO".equalsIgnoreCase(resposta.trim())) {
+                    statusWifi = "Wi-Fi atualizado com sucesso.";
+                    sucesso = true;
+                } else {
+                    statusWifi = "ESP32 recusou a configuração: " + resposta.trim();
+                }
+            }
+        } catch (RuntimeException e) {
+            statusWifi = "Erro de comunicação ao configurar o Wi-Fi: " + e.getMessage();
+        } finally {
+            pedidoWifiPendente.compareAndSet(request, null);
+            request.resultado.complete(Boolean.valueOf(sucesso));
+        }
+    }
+
     // ------------------------------------------------------------------
     // HTTP / JSON
     // ------------------------------------------------------------------
@@ -395,7 +543,6 @@ public class SensorClient {
 
     /** GET simples. Devolve o corpo, ou null (com mensagemErro preenchida) em qualquer falha. */
     private String lerPayload(String base, String endpoint, int timeoutMs) {
-        if (ehSerial(base)) return lerSerial(endpoint, Math.min(timeoutMs, TIMEOUT_SERIAL_MS));
         HttpURLConnection conexao = null;
         try {
             conexao = (HttpURLConnection) new URL(base + endpoint).openConnection();
@@ -427,6 +574,149 @@ public class SensorClient {
         }
     }
 
+    // ------------------------------------------------------------------
+    // USB serial
+    // ------------------------------------------------------------------
+    private String descobrirSerial(String candidato) {
+        if (serialIndisponivel) return null;
+        long agora = System.currentTimeMillis();
+        if (agora - ultimaBuscaSerial < INTERVALO_BUSCA_SERIAL_MS) return null;
+        ultimaBuscaSerial = agora;
+
+        String alvo = SERIAL_AUTO.equalsIgnoreCase(candidato)
+                ? null : candidato.substring(PREFIXO_SERIAL.length());
+        try {
+            for (SerialPort porta : SerialPort.getCommPorts()) {
+                if (!rodando) return null;
+                String nome = porta.getSystemPortName();
+                if (alvo != null ? !alvo.equalsIgnoreCase(nome) : !portaProvavel(porta)) continue;
+                if (!abrirSerial(porta)) continue;
+
+                String resposta = enviarComandoSerial("DADOS", TIMEOUT_DESCOBERTA_SERIAL_MS);
+                if (resposta != null && interpretarJson(resposta) != null) {
+                    return PREFIXO_SERIAL + nome;
+                }
+                fecharSerial();
+            }
+        } catch (LinkageError e) {
+            serialIndisponivel = true;
+            mensagemErro = "Biblioteca serial indisponível nesta plataforma: " + e.getMessage();
+            fecharSerial();
+        } catch (RuntimeException e) {
+            mensagemErro = "Erro ao procurar a porta serial: " + e.getMessage();
+            fecharSerial();
+        }
+        return null;
+    }
+
+    private static boolean portaProvavel(SerialPort porta) {
+        String descricao = (porta.getSystemPortName() + " " + porta.getDescriptivePortName() + " "
+                + porta.getPortDescription()).toLowerCase(Locale.ROOT);
+        if (descricao.contains("bluetooth")) return false;
+        String[] identificadores = {"usb", "uart", "cp210", "ch340", "ch341", "ch910",
+                "ftdi", "silicon labs", "wch", "acm", "slab"};
+        for (String identificador : identificadores) {
+            if (descricao.contains(identificador)) return true;
+        }
+        return false;
+    }
+
+    private boolean abrirSerial(SerialPort porta) {
+        fecharSerial();
+        porta.setComPortParameters(BAUD_SERIAL, 8, SerialPort.ONE_STOP_BIT, SerialPort.NO_PARITY);
+        porta.setFlowControl(SerialPort.FLOW_CONTROL_DISABLED);
+        porta.setComPortTimeouts(SerialPort.TIMEOUT_READ_SEMI_BLOCKING, 100, 0);
+        if (!porta.openPort()) {
+            mensagemErro = "Não foi possível abrir " + porta.getSystemPortName()
+                    + "; verifique se outra aplicação está usando a porta.";
+            return false;
+        }
+        porta.clearDTR();
+        porta.clearRTS();
+        portaSerial = porta;
+        return true;
+    }
+
+    private void fecharSerial() {
+        SerialPort porta = portaSerial;
+        portaSerial = null;
+        if (porta != null) {
+            try {
+                if (porta.isOpen()) porta.closePort();
+            } catch (RuntimeException e) {
+                mensagemErro = "Erro ao fechar a porta serial: " + e.getMessage();
+            }
+        }
+    }
+
+    private String lerSerial(String comando, int timeoutMs) {
+        return enviarComandoSerial(comando, timeoutMs);
+    }
+
+    private String enviarComandoSerial(String comando, int timeoutMs) {
+        SerialPort porta = portaSerial;
+        if (porta == null || !porta.isOpen()) {
+            mensagemErro = "Porta serial do ESP32 fechada.";
+            return null;
+        }
+        try {
+            byte[] descarte = new byte[256];
+            while (porta.bytesAvailable() > 0) {
+                int disponiveis = Math.min(porta.bytesAvailable(), descarte.length);
+                if (porta.readBytes(descarte, disponiveis) < 0) {
+                    throw new java.io.IOException("Falha ao limpar dados antigos da porta serial.");
+                }
+            }
+
+            byte[] bytes = (comando + "\n").getBytes("UTF-8");
+            if (porta.writeBytes(bytes, bytes.length) != bytes.length) {
+                throw new java.io.IOException("Falha ao escrever o comando na porta serial.");
+            }
+
+            long limite = System.currentTimeMillis() + timeoutMs;
+            StringBuilder linha = new StringBuilder();
+            byte[] buffer = new byte[128];
+            while (rodando && System.currentTimeMillis() < limite) {
+                int lidos = porta.readBytes(buffer, buffer.length);
+                if (lidos < 0) throw new java.io.IOException("A porta serial foi desconectada.");
+                for (int i = 0; i < lidos; i++) {
+                    char caractere = (char) (buffer[i] & 0xFF);
+                    if (caractere == '\n') {
+                        String resposta = linha.toString().trim();
+                        linha.setLength(0);
+                        if (resposta.startsWith("ERR")) return resposta;
+                        if (respostaSerialValida(resposta, comando)) return resposta;
+                    } else if (caractere != '\r' && linha.length() < 1024) {
+                        linha.append(caractere);
+                    }
+                }
+            }
+            mensagemErro = "Tempo esgotado aguardando resposta ao comando " + comando + " pela serial.";
+        } catch (Exception e) {
+            mensagemErro = "Erro de comunicação serial: "
+                    + (e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage());
+            fecharSerial();
+        }
+        return null;
+    }
+
+    private static boolean respostaSerialValida(String resposta, String comando) {
+        if ("CALIBRAR".equals(comando)) return "OK".equalsIgnoreCase(resposta);
+        if ("SETWIFI".equals(comando) || comando.startsWith("SETWIFI:")) {
+            return "OK WIFI ATUALIZADO".equalsIgnoreCase(resposta);
+        }
+        if (!resposta.startsWith("{")) return false;
+        try {
+            JsonValue json = new JsonReader().parse(resposta);
+            if ("PROGRESSO".equals(comando)) {
+                return json.isObject() && json.get("progresso") != null;
+            }
+            return json.isObject() && json.get("angX") != null && json.get("angY") != null;
+        } catch (RuntimeException e) {
+            return false;
+        }
+    }
+
     private String lerCorpo(InputStream stream) throws Exception {
         if (stream == null) return "";
         BufferedReader leitor = new BufferedReader(new InputStreamReader(stream, "UTF-8"));
@@ -443,151 +733,14 @@ public class SensorClient {
         }
     }
 
-    // ------------------------------------------------------------------
-    // USB / serial
-    // ------------------------------------------------------------------
-    /**
-     * Procura o ESP32 nas portas seriais. candidato = "serial:auto" (testa só portas que
-     * parecem USB-serial) ou "serial:COM5" (testa só essa). Devolve "serial:NOME" com a
-     * porta ABERTA e validada, ou null. Limitado a uma varredura a cada poucos segundos.
-     */
-    private String descobrirSerial(String candidato) {
-        if (serialIndisponivel) return null;
-        long agora = System.currentTimeMillis();
-        if (agora - ultimaBuscaSerial < INTERVALO_BUSCA_SERIAL_MS) return null;
-        ultimaBuscaSerial = agora;
+    private static final class WifiRequest {
+        private final String ssid;
+        private final String password;
+        private final CompletableFuture<Boolean> resultado = new CompletableFuture<Boolean>();
 
-        String alvo = SERIAL_AUTO.equals(candidato)
-                ? null : candidato.substring(PREFIXO_SERIAL.length()).replace("/dev/", "");
-        try {
-            for (SerialPort p : SerialPort.getCommPorts()) {
-                if (!rodando) return null;
-                String nome = p.getSystemPortName();
-                if (alvo != null ? !alvo.equalsIgnoreCase(nome) : !portaProvavel(p)) continue;
-                if (!abrirSerial(p)) continue;
-
-                // Abrir a porta costuma reiniciar o ESP32: insiste ate ele responder.
-                long limite = System.currentTimeMillis() + TIMEOUT_SERIAL_DESCOBERTA_MS;
-                while (rodando && System.currentTimeMillis() < limite && portaSerial != null) {
-                    String payload = lerSerial("/api/dados", 700);
-                    if (payload != null && interpretarJson(payload) != null) {
-                        return PREFIXO_SERIAL + nome;
-                    }
-                }
-                fecharSerial();
-            }
-        } catch (LinkageError e) {                 // jSerialComm sem a lib nativa desta plataforma
-            serialIndisponivel = true;
-            fecharSerial();
-        } catch (RuntimeException e) {
-            fecharSerial();
+        private WifiRequest(String ssid, String password) {
+            this.ssid = ssid;
+            this.password = password;
         }
-        return null;
-    }
-
-    /** Evita abrir Bluetooth, modems etc.: só portas com cara de ponte USB-serial do ESP32. */
-    private static boolean portaProvavel(SerialPort p) {
-        String texto = (p.getSystemPortName() + " " + p.getDescriptivePortName() + " "
-                + p.getPortDescription()).toLowerCase(Locale.ROOT);
-        if (texto.contains("bluetooth")) return false;
-        String[] pistas = {"usb", "uart", "cp210", "ch340", "ch341", "ch910", "ftdi", "silicon labs",
-                "acm", "slab", "wch"};
-        for (String pista : pistas) {
-            if (texto.contains(pista)) return true;
-        }
-        return false;
-    }
-
-    private boolean abrirSerial(SerialPort p) {
-        fecharSerial();
-        p.setComPortParameters(BAUD_SERIAL, 8, SerialPort.ONE_STOP_BIT, SerialPort.NO_PARITY);
-        p.setFlowControl(SerialPort.FLOW_CONTROL_DISABLED);
-        // read espera até 100 ms por dados e devolve o que tiver (0 = nada, -1 = erro)
-        p.setComPortTimeouts(SerialPort.TIMEOUT_READ_SEMI_BLOCKING, 100, 0);
-        if (!p.openPort()) {
-            mensagemErro = "Nao consegui abrir " + p.getSystemPortName()
-                    + " (outro programa, como o Serial Monitor, pode estar usando).";
-            return false;
-        }
-        // Linhas em repouso: evita pulso de reset/boot-mode no ESP32 em placas com auto-reset.
-        p.clearDTR();
-        p.clearRTS();
-        portaSerial = p;
-        return true;
-    }
-
-    private void fecharSerial() {
-        SerialPort p = portaSerial;
-        portaSerial = null;
-        if (p != null) {
-            try { p.closePort(); } catch (RuntimeException ignorada) { }
-        }
-    }
-
-    /**
-     * Mesmo contrato do GET HTTP: manda o comando, devolve a linha de resposta ou null.
-     * Linhas que não são a resposta esperada (logs do Serial.println do firmware) são ignoradas.
-     */
-    private String lerSerial(String endpoint, int timeoutMs) {
-        SerialPort p = portaSerial;
-        if (p == null || !p.isOpen()) {
-            mensagemErro = "Porta USB fechada.";
-            return null;
-        }
-        String comando;
-        if ("/api/calibrar".equals(endpoint)) comando = "CALIBRAR";
-        else if ("/api/progresso".equals(endpoint)) comando = "PROGRESSO";
-        else comando = "DADOS";
-
-        try {
-            byte[] lixo = new byte[256];
-            while (p.bytesAvailable() > 0) p.readBytes(lixo, lixo.length);   // descarta logs/respostas velhas
-
-            byte[] cmd = (comando + "\n").getBytes("UTF-8");
-            if (p.writeBytes(cmd, cmd.length) < 0) {
-                mensagemErro = "Falha ao escrever na porta USB (cabo solto?).";
-                fecharSerial();
-                return null;
-            }
-
-            StringBuilder linha = new StringBuilder();
-            byte[] buf = new byte[128];
-            long limite = System.currentTimeMillis() + timeoutMs;
-            while (rodando && System.currentTimeMillis() < limite) {
-                int n = p.readBytes(buf, buf.length);
-                if (n < 0) {
-                    mensagemErro = "Cabo USB desconectado.";
-                    fecharSerial();
-                    return null;
-                }
-                for (int i = 0; i < n; i++) {
-                    char c = (char) (buf[i] & 0xFF);
-                    if (c == '\n') {
-                        String l = linha.toString().trim();
-                        linha.setLength(0);
-                        if (l.startsWith("ERR")) {
-                            mensagemErro = "ESP32 recusou " + comando + ": " + l;
-                            return null;
-                        }
-                        if (respostaSerialValida(l, comando)) return l;
-                    } else if (c != '\r' && linha.length() < 512) {
-                        linha.append(c);
-                    }
-                }
-            }
-            mensagemErro = "Tempo esgotado esperando " + comando + " pela porta USB "
-                    + p.getSystemPortName() + ".";
-            return null;
-        } catch (Exception e) {
-            mensagemErro = "Erro na porta USB: " + e.getMessage();
-            fecharSerial();
-            return null;
-        }
-    }
-
-    private static boolean respostaSerialValida(String l, String comando) {
-        if ("CALIBRAR".equals(comando)) return l.equalsIgnoreCase("OK");
-        if (!l.startsWith("{")) return false;
-        return l.contains("PROGRESSO".equals(comando) ? "\"progresso\"" : "\"angY\"");
     }
 }

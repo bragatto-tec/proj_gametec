@@ -19,6 +19,7 @@ public class Main implements ApplicationListener {
     private enum Estado {
         MENU,
         CALIBRANDO,
+        CONFIGURANDO_WIFI,
         SELECAO_DURACAO,
         PREPARACAO,
         PAUSA,
@@ -54,6 +55,7 @@ public class Main implements ApplicationListener {
 
     private SensorClient sensorClient;
     private TelaCalibracao telaCalibracao;
+    private TelaConfiguracaoWifi telaConfiguracaoWifi;
     private TelaSelecaoDuracao telaSelecaoDuracao;
     private TelaPreparacao telaPreparacao;
     private TelaPausa telaPausa;
@@ -71,7 +73,10 @@ public class Main implements ApplicationListener {
 
     private Button botaoJogar;
     private Button botaoCalibrar;
+    private Button botaoWifi;
     private Button botaoSair;
+    private boolean modoWifiSelecionado;
+    private boolean modoWifiAntesDaConfiguracao;
 
     public Main() {
         this(null);
@@ -109,7 +114,8 @@ public class Main implements ApplicationListener {
 
         botaoJogar = new Button(uiAssets, "jogar", 2.5f, 3.0f, 3, 0.7f);
         botaoCalibrar = new Button(uiAssets, "calibrar_sensor", 2.5f, 2.0f, 3, 0.7f);
-        botaoSair = new Button(uiAssets, "sair", 2.5f, 1.0f, 3, 0.7f);
+        botaoWifi = new Button(uiAssets, "configuracoes", 2.5f, 1.0f, 3, 0.7f);
+        botaoSair = new Button(uiAssets, "sair", 2.5f, 0.1f, 3, 0.7f);
     }
 
     @Override
@@ -130,7 +136,21 @@ public class Main implements ApplicationListener {
             viewport.unproject(touchPos);
             botaoJogar.atualizarEstado(touchPos);
             botaoCalibrar.atualizarEstado(touchPos);
+            botaoWifi.atualizarEstado(touchPos);
             botaoSair.atualizarEstado(touchPos);
+        }
+        if (estadoAtual == Estado.CONFIGURANDO_WIFI) {
+            telaConfiguracaoWifi.input();
+            if (telaConfiguracaoWifi.isVoltarSolicitado()) {
+                telaConfiguracaoWifi.fechar();
+                restaurarConexaoAntesDaConfiguracaoWifi();
+                estadoAtual = Estado.MENU;
+            } else if (telaConfiguracaoWifi.isConexaoWifiSolicitada()) {
+                telaConfiguracaoWifi.fechar();
+                conectarViaWifi();
+                estadoAtual = Estado.MENU;
+            }
+            return;
         }
         if (estadoAtual == Estado.CALIBRANDO) {
             if (telaCalibracao.input()) {
@@ -225,6 +245,11 @@ public class Main implements ApplicationListener {
                 Gdx.app.log("RehabCar", "Calibrar sensor");
                 telaCalibracao.abrir();
                 estadoAtual = Estado.CALIBRANDO;
+                return;
+            }
+            if (botaoWifi.foiClicado(touchPos.x, touchPos.y)) {
+                abrirConfiguracaoWifi();
+                return;
             }
             if (botaoSair.foiClicado(touchPos.x, touchPos.y)) {
                 Gdx.app.exit();
@@ -315,6 +340,46 @@ public class Main implements ApplicationListener {
         }
     }
 
+    private void conectarViaWifi() {
+        sensorClient.parar();
+        telaCalibracao.dispose();
+        sensorClient = criarClienteWifi();
+        telaCalibracao = new TelaCalibracao(viewport, font, uiAssets, sensorClient);
+        telaPreparacao = new TelaPreparacao(viewport, font, uiAssets, sensorClient);
+        modoWifiSelecionado = true;
+        Gdx.app.log("RehabCar", "Conexão Wi-Fi selecionada; procurando o ESP32.");
+    }
+
+    private void abrirConfiguracaoWifi() {
+        modoWifiAntesDaConfiguracao = modoWifiSelecionado;
+        sensorClient.parar();
+        telaCalibracao.dispose();
+        sensorClient = new SensorClient(SensorClient.ConnectionMode.SERIAL);
+        telaCalibracao = new TelaCalibracao(viewport, font, uiAssets, sensorClient);
+        telaPreparacao = new TelaPreparacao(viewport, font, uiAssets, sensorClient);
+        telaConfiguracaoWifi = new TelaConfiguracaoWifi(viewport, font, sensorClient);
+        telaConfiguracaoWifi.abrir();
+        estadoAtual = Estado.CONFIGURANDO_WIFI;
+    }
+
+    private void restaurarConexaoAntesDaConfiguracaoWifi() {
+        sensorClient.parar();
+        sensorClient = modoWifiAntesDaConfiguracao ? criarClienteWifi() : criarClientePadrao();
+        telaCalibracao = new TelaCalibracao(viewport, font, uiAssets, sensorClient);
+        telaPreparacao = new TelaPreparacao(viewport, font, uiAssets, sensorClient);
+    }
+
+    private SensorClient criarClienteWifi() {
+        if (sensorBaseUrl == null || sensorBaseUrl.trim().toLowerCase(Locale.ROOT).startsWith("serial:")) {
+            return new SensorClient(SensorClient.ConnectionMode.WIFI);
+        }
+        return new SensorClient(SensorClient.ConnectionMode.WIFI, sensorBaseUrl);
+    }
+
+    private SensorClient criarClientePadrao() {
+        return sensorBaseUrl == null ? new SensorClient() : new SensorClient(sensorBaseUrl);
+    }
+
     private void logic() {
         sensorClient.update(Gdx.graphics.getDeltaTime());
         float dt = Gdx.graphics.getDeltaTime();
@@ -383,6 +448,11 @@ public class Main implements ApplicationListener {
             return;
         }
 
+        if (estadoAtual == Estado.CONFIGURANDO_WIFI) {
+            telaConfiguracaoWifi.draw(spriteBatch);
+            return;
+        }
+
         if (estadoAtual == Estado.SELECAO_DURACAO) {
             telaSelecaoDuracao.draw(spriteBatch);
             return;
@@ -417,6 +487,7 @@ public class Main implements ApplicationListener {
         font.draw(spriteBatch, "RehabCar", 0, 4.8f, viewport.getWorldWidth(), Align.center, false);
         botaoJogar.draw(spriteBatch);
         botaoCalibrar.draw(spriteBatch);
+        botaoWifi.draw(spriteBatch);
         botaoSair.draw(spriteBatch);
         spriteBatch.end();
     }
@@ -432,6 +503,7 @@ public class Main implements ApplicationListener {
     @Override
     public void dispose() {
         sensorClient.parar();
+        if (telaConfiguracaoWifi != null) telaConfiguracaoWifi.fechar();
         telaCalibracao.dispose();
         rua.dispose();
         pista.dispose();
