@@ -146,8 +146,9 @@ public class Main implements ApplicationListener {
                 restaurarConexaoAntesDaConfiguracaoWifi();
                 estadoAtual = Estado.MENU;
             } else if (telaConfiguracaoWifi.isConexaoWifiSolicitada()) {
+                String enderecoWifi = telaConfiguracaoWifi.getEnderecoWifi();
                 telaConfiguracaoWifi.fechar();
-                conectarViaWifi();
+                conectarViaWifi(enderecoWifi);
                 estadoAtual = Estado.MENU;
             }
             return;
@@ -340,10 +341,10 @@ public class Main implements ApplicationListener {
         }
     }
 
-    private void conectarViaWifi() {
+    private void conectarViaWifi(String enderecoWifi) {
         sensorClient.parar();
         telaCalibracao.dispose();
-        sensorClient = criarClienteWifi();
+        sensorClient = criarClienteWifi(enderecoWifi);
         telaCalibracao = new TelaCalibracao(viewport, font, uiAssets, sensorClient);
         telaPreparacao = new TelaPreparacao(viewport, font, uiAssets, sensorClient);
         modoWifiSelecionado = true;
@@ -370,10 +371,20 @@ public class Main implements ApplicationListener {
     }
 
     private SensorClient criarClienteWifi() {
-        if (sensorBaseUrl == null || sensorBaseUrl.trim().toLowerCase(Locale.ROOT).startsWith("serial:")) {
-            return new SensorClient(SensorClient.ConnectionMode.WIFI);
+        return criarClienteWifi(null);
+    }
+
+    private SensorClient criarClienteWifi(String enderecoWifi) {
+        String endereco = enderecoWifi == null || enderecoWifi.trim().isEmpty()
+                ? sensorBaseUrl : enderecoWifi.trim();
+        if (endereco == null || endereco.trim().isEmpty()) {
+            return new SensorClient();
         }
-        return new SensorClient(SensorClient.ConnectionMode.WIFI, sensorBaseUrl);
+        if (endereco.trim().toLowerCase(Locale.ROOT).startsWith("serial:")) {
+            return new SensorClient(SensorClient.ConnectionMode.AUTO, endereco);
+        }
+        // Um endereço informado é tentado primeiro; depois a descoberta usa USB e os endereços padrão.
+        return new SensorClient(SensorClient.ConnectionMode.AUTO, endereco);
     }
 
     private SensorClient criarClientePadrao() {
