@@ -6,7 +6,7 @@ import com.badlogic.gdx.math.Rectangle;
 
 public class Car extends GameObject {
 
-    private static final float ANGULO_ENTRADA_FAIXA = 5f;
+    public static final float ANGULO_ENTRADA_FAIXA = 5f;
     private static final float ANGULO_SAIDA_FAIXA = 3f;
     private static final float FILTRO_INCLINACAO_SEGUNDOS = 0.12f;
     private static final float RESPOSTA_DIRECAO = 12f;

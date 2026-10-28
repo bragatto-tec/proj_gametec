@@ -36,6 +36,8 @@ public class Main implements ApplicationListener {
     private static final int PONTOS_BATIDA = 5;
     private static final int FASES = 3;
     private static final float DURACAO_AVISO_FASE = 2f;
+    // Bonus de velocidade: quanto mais fases o jogador acompanha, mais pontos (a pista acelera a cada fase).
+    private static final int BONUS_VELOCIDADE_POR_FASE = 20;
     // Velocidade da animacao da rua em cada fase (1 = 24 quadros por segundo).
     // Acompanha a velocidade dos itens: 4,5 / 5,5 / 6,5 no GerenciadorPista.
     private static final float[] VELOCIDADES_RUA = {1.0f, 1.22f, 1.44f};
@@ -62,11 +64,13 @@ public class Main implements ApplicationListener {
     private int fase = 1;
     private float tempoAviso;
     private String motivoFim = "";
+    private boolean usouSensor;
+    private float maiorInclinacaoEsquerda;
+    private float maiorInclinacaoDireita;
     private Estado estadoAtual;
 
     private Button botaoJogar;
     private Button botaoCalibrar;
-    private Button botaoConfig;
     private Button botaoSair;
 
     public Main() {
@@ -104,9 +108,8 @@ public class Main implements ApplicationListener {
         estadoAtual = Estado.MENU;
 
         botaoJogar = new Button(uiAssets, "jogar", 2.5f, 3.0f, 3, 0.7f);
-        botaoCalibrar = new Button(uiAssets, "calibrar_sensor", 2.5f, 2.1f, 3, 0.7f);
-        botaoConfig = new Button(uiAssets, "configuracoes", 2.5f, 1.2f, 3, 0.7f);
-        botaoSair = new Button(uiAssets, "sair", 2.5f, 0.3f, 3, 0.7f);
+        botaoCalibrar = new Button(uiAssets, "calibrar_sensor", 2.5f, 2.0f, 3, 0.7f);
+        botaoSair = new Button(uiAssets, "sair", 2.5f, 1.0f, 3, 0.7f);
     }
 
     @Override
@@ -127,7 +130,6 @@ public class Main implements ApplicationListener {
             viewport.unproject(touchPos);
             botaoJogar.atualizarEstado(touchPos);
             botaoCalibrar.atualizarEstado(touchPos);
-            botaoConfig.atualizarEstado(touchPos);
             botaoSair.atualizarEstado(touchPos);
         }
         if (estadoAtual == Estado.CALIBRANDO) {
@@ -224,9 +226,6 @@ public class Main implements ApplicationListener {
                 telaCalibracao.abrir();
                 estadoAtual = Estado.CALIBRANDO;
             }
-            if (botaoConfig.foiClicado(touchPos.x, touchPos.y)) {
-                Gdx.app.log("RehabCar", "Configuracoes");
-            }
             if (botaoSair.foiClicado(touchPos.x, touchPos.y)) {
                 Gdx.app.exit();
             }
@@ -246,14 +245,30 @@ public class Main implements ApplicationListener {
         rua.reiniciar();
         rua.setVelocidade(VELOCIDADES_RUA[0]);
         pista.reiniciar();
+        usouSensor = false;
+        maiorInclinacaoEsquerda = 0f;
+        maiorInclinacaoDireita = 0f;
     }
 
     private void encerrarPartida(String motivo) {
         motivoFim = motivo;
-        telaResultados.abrir(motivoFim, duracaoPartida, calcularPontos(),
-                pista.getMoedas(), pista.getMoedasPerdidas(), pista.getBatidas(), MAX_BATIDAS,
-                fase, FASES, duracaoPartida - tempoRestante);
+        int base = calcularPontos();
+        int bonusConsistencia = calcularAproveitamento();
+        int bonusVelocidade = fase * BONUS_VELOCIDADE_POR_FASE;
+        int total = base + bonusConsistencia + bonusVelocidade;
+        telaResultados.abrir(motivoFim, "Horizontal", duracaoPartida, total, base, bonusConsistencia,
+                bonusVelocidade, pista.getMoedas(), pista.getMoedasPerdidas(), pista.getBatidas(), MAX_BATIDAS,
+                fase, FASES, duracaoPartida - tempoRestante, usouSensor,
+                maiorInclinacaoEsquerda, maiorInclinacaoDireita);
         estadoAtual = Estado.RESULTADOS;
+    }
+
+    private int calcularAproveitamento() {
+        int total = pista.getMoedas() + pista.getMoedasPerdidas();
+        if (total == 0) {
+            return 0;
+        }
+        return Math.round(100f * pista.getMoedas() / total);
     }
 
     private int calcularPontos() {
@@ -307,7 +322,11 @@ public class Main implements ApplicationListener {
         if (estadoAtual == Estado.JOGANDO) {
             rua.update(dt);
             if (sensorClient.sensorPronto()) {
-                carro.seguirInclinacao(sensorClient.getAngX(), dt);
+                float angulo = sensorClient.getAngX();
+                carro.seguirInclinacao(angulo, dt);
+                usouSensor = true;
+                maiorInclinacaoDireita = Math.max(maiorInclinacaoDireita, angulo);
+                maiorInclinacaoEsquerda = Math.max(maiorInclinacaoEsquerda, -angulo);
             }
             carro.update(dt);
             pista.update(dt, carro.getBounds());
@@ -398,7 +417,6 @@ public class Main implements ApplicationListener {
         font.draw(spriteBatch, "RehabCar", 0, 4.8f, viewport.getWorldWidth(), Align.center, false);
         botaoJogar.draw(spriteBatch);
         botaoCalibrar.draw(spriteBatch);
-        botaoConfig.draw(spriteBatch);
         botaoSair.draw(spriteBatch);
         spriteBatch.end();
     }

@@ -19,8 +19,12 @@ public class TelaResultados {
     private final Button botaoMenu;
 
     private String motivo = "";
+    private String nomeModo = "";
     private int duracaoSegundos;
     private int pontos;
+    private int pontosBase;
+    private int bonusConsistencia;
+    private int bonusVelocidade;
     private int moedas;
     private int moedasPerdidas;
     private int batidas;
@@ -30,6 +34,9 @@ public class TelaResultados {
     private float tempoJogado;
     private int melhorPontuacao;
     private boolean novoRecorde;
+    private boolean usouSensor;
+    private float maiorEsquerda;
+    private float maiorDireita;
 
     private boolean jogarNovamenteSolicitado;
     private boolean menuSolicitado;
@@ -43,11 +50,20 @@ public class TelaResultados {
         this.botaoMenu = new Button(uiAssets, "voltar_ao_menu", 4.2f, 0.25f, 3.0f, 0.6f);
     }
 
-    public void abrir(String motivo, int duracaoSegundos, int pontos, int moedas,
-                      int moedasPerdidas, int batidas, int maxBatidas, int fase, int fases, float tempoJogado) {
+    public void abrir(String motivo, String nomeModo, int duracaoSegundos, int pontos, int pontosBase,
+                      int bonusConsistencia, int bonusVelocidade, int moedas, int moedasPerdidas, int batidas,
+                      int maxBatidas, int fase, int fases, float tempoJogado, boolean usouSensor,
+                      float maiorEsquerda, float maiorDireita) {
         this.motivo = motivo;
+        this.nomeModo = nomeModo;
         this.duracaoSegundos = duracaoSegundos;
         this.pontos = pontos;
+        this.pontosBase = pontosBase;
+        this.bonusConsistencia = bonusConsistencia;
+        this.bonusVelocidade = bonusVelocidade;
+        this.usouSensor = usouSensor;
+        this.maiorEsquerda = maiorEsquerda;
+        this.maiorDireita = maiorDireita;
         this.moedas = moedas;
         this.moedasPerdidas = moedasPerdidas;
         this.batidas = batidas;
@@ -119,30 +135,39 @@ public class TelaResultados {
         batch.begin();
         Ui.fundo(batch, largura, viewport.getWorldHeight());
         Ui.texto(batch, font, "FIM DE PARTIDA", 0, 4.85f, largura, Align.center, 0.025f, Color.WHITE, false);
-        Ui.texto(batch, font, motivo + "  -  Modo Horizontal, " + (duracaoSegundos / 60) + " min",
+        Ui.texto(batch, font, motivo + "  -  Modo " + nomeModo + ", " + (duracaoSegundos / 60) + " min",
                 0, 4.25f, largura, Align.center, 0.0150f, Ui.MUTED, false);
 
         Ui.painel(batch, Ui.Estilo.AZUL, 0.5f, 1.1f, 3.3f, 2.6f);
-        Ui.texto(batch, font, "PONTUAÇÃO", 0.5f, 3.45f, 3.3f, Align.center, 0.011f, Ui.AMARELO, false);
-        Ui.textoLinha(batch, font, String.valueOf(pontos), 0.5f, 2.05f, 3.3f, 1.0f, Align.center, 0.06f, Ui.AMARELO);
+        Ui.texto(batch, font, "PONTUAÇÃO", 0.5f, 3.55f, 3.3f, Align.center, 0.011f, Ui.AMARELO, false);
+        Ui.textoLinha(batch, font, String.valueOf(pontos), 0.5f, 2.45f, 3.3f, 0.85f, Align.center, 0.06f, Ui.AMARELO);
+        Ui.textoLinha(batch, font, "Base " + pontosBase + " + Consist. " + bonusConsistencia + " + Veloc. " + bonusVelocidade,
+                0.5f, 2.05f, 3.3f, 0.35f, Align.center, 0.0115f, Ui.MUTED);
         if (novoRecorde && pontos > 0) {
-            Ui.pilula(batch, true, 0.95f, 1.35f, 2.4f, 0.42f);
-            Ui.textoLinha(batch, font, "NOVO RECORDE!", 0.95f, 1.35f, 2.4f, 0.42f, Align.center, 0.0150f, Ui.AMARELO);
+            Ui.pilula(batch, true, 0.95f, 1.4f, 2.4f, 0.42f);
+            Ui.textoLinha(batch, font, "NOVO RECORDE!", 0.95f, 1.4f, 2.4f, 0.42f, Align.center, 0.0150f, Ui.AMARELO);
         } else {
-            Ui.textoLinha(batch, font, "Melhor: " + melhorPontuacao, 0.5f, 1.35f, 3.3f, 0.42f, Align.center, 0.0150f, Ui.MUTED);
+            Ui.textoLinha(batch, font, "Melhor: " + melhorPontuacao, 0.5f, 1.4f, 3.3f, 0.42f, Align.center, 0.0150f, Ui.MUTED);
         }
 
         float x = 4.0f;
         Ui.painel(batch, Ui.Estilo.NEUTRO, x, 1.1f, 3.5f, 2.6f);
-        batch.draw(Ui.moeda(), x + 0.25f, 3.08f, 0.34f, 0.34f);
-        linha(batch, x, 3.05f, "Moedas: " + moedas + " de " + (moedas + moedasPerdidas), Color.WHITE);
-        batch.draw(Ui.cone(), x + 0.22f, 2.6f, 0.4f, 0.4f);
-        linha(batch, x, 2.6f, "Batidas: " + batidas + " de " + maxBatidas, batidas >= maxBatidas ? Ui.VERMELHO : Color.WHITE);
-        linha(batch, x, 2.15f, "Aproveitamento: " + aproveitamento() + "%", Color.WHITE);
-        linha(batch, x, 1.7f, "Fase alcançada: " + fase + "/" + fases, Color.WHITE);
+        batch.draw(Ui.moeda(), x + 0.25f, 3.28f, 0.34f, 0.34f);
+        linha(batch, x, 3.25f, "Moedas: " + moedas + " de " + (moedas + moedasPerdidas), Color.WHITE);
+        batch.draw(Ui.cone(), x + 0.22f, 2.85f, 0.4f, 0.4f);
+        linha(batch, x, 2.85f, "Batidas: " + batidas + " de " + maxBatidas, batidas >= maxBatidas ? Ui.VERMELHO : Color.WHITE);
+        linha(batch, x, 2.45f, "Aproveitamento: " + aproveitamento() + "%", Color.WHITE);
+        linha(batch, x, 2.05f, "Fase alcançada: " + fase + "/" + fases, Color.WHITE);
         int segundos = (int) tempoJogado;
-        linha(batch, x, 1.25f, String.format(Locale.ROOT, "Tempo jogado: %02d:%02d", segundos / 60, segundos % 60),
+        linha(batch, x, 1.65f, String.format(Locale.ROOT, "Tempo jogado: %02d:%02d", segundos / 60, segundos % 60),
                 Color.WHITE);
+        if (usouSensor) {
+            boolean metaAtingida = maiorEsquerda >= Car.ANGULO_ENTRADA_FAIXA && maiorDireita >= Car.ANGULO_ENTRADA_FAIXA;
+            linha(batch, x, 1.25f, String.format(Locale.ROOT, "Máx: esq %.0f° / dir %.0f°", maiorEsquerda, maiorDireita),
+                    metaAtingida ? Ui.VERDE : Color.WHITE);
+        } else {
+            linha(batch, x, 1.25f, "Inclinação: sem sensor", Ui.MUTED);
+        }
 
         botaoJogarNovamente.draw(batch);
         botaoMenu.draw(batch);
