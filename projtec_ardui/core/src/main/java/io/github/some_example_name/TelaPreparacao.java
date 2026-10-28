@@ -20,8 +20,6 @@ public class TelaPreparacao {
     private final Button botaoIniciar;
     private final Button botaoVoltar;
 
-    private int modo;
-    private String nomeModo;
     private int duracaoSegundos;
     private boolean contando;
     private float tempoContagem;
@@ -37,12 +35,9 @@ public class TelaPreparacao {
         this.botaoVoltar = new Button(uiAssets, "voltar", 1.0f, 0.2f, 2.5f, 0.6f);
         this.botaoIniciar = new Button(uiAssets, "iniciar", 4.5f, 0.2f, 2.5f, 0.6f);
 
-        this.nomeModo = "nenhum";
     }
 
-    public void abrir(int modo, String nomeModo, int duracaoSegundos) {
-        this.modo = modo;
-        this.nomeModo = nomeModo;
+    public void abrir(int duracaoSegundos) {
         this.duracaoSegundos = duracaoSegundos;
         contando = false;
         tempoContagem = DURACAO_CONTAGEM;
@@ -116,9 +111,8 @@ public class TelaPreparacao {
         Ui.fundo(batch, largura, viewport.getWorldHeight());
         Ui.texto(batch, font, "PREPARAR PARTIDA", 0, 4.88f, largura, Align.center, 0.023f, Color.WHITE, false);
 
-        // modo escolhido
         Ui.pilula(batch, true, 2.1f, 4.0f, 3.8f, 0.42f);
-        Ui.textoLinha(batch, font, "Modo: " + nomeModo + " - " + (duracaoSegundos / 60) + " min",
+        Ui.textoLinha(batch, font, "Modo: Horizontal - " + (duracaoSegundos / 60) + " min",
                 2.1f, 4.0f, 3.8f, 0.42f, Align.center, 0.0165f, Ui.AMARELO);
 
         // objetivo
@@ -131,7 +125,7 @@ public class TelaPreparacao {
 
         // controles
         Ui.painel(batch, Ui.Estilo.NEUTRO, 0.5f, 1.48f, 7.0f, 1.1f);
-        batch.draw(Ui.iconeModo(modo), 0.82f, 1.76f, 0.54f, 0.54f);
+        batch.draw(Ui.iconeModo(), 0.82f, 1.76f, 0.54f, 0.54f);
         Ui.texto(batch, font, "CONTROLES", 2.1f, 2.44f, 5.2f, Align.left, 0.011f, Ui.AMARELO, false);
         Ui.texto(batch, font, textoControles(), 2.1f, 2.22f, 5.2f, Align.left, 0.0135f, Color.WHITE, true);
 
@@ -165,6 +159,6 @@ public class TelaPreparacao {
         Ui.texto(batch, font, "PREPARE-SE!", 0, 4.2f, largura, Align.center, 0.02f, Color.WHITE, false);
         Ui.anel(batch, Ui.AMARELO, largura / 2f, 2.5f, 2.3f * pulso);
         Ui.textoLinha(batch, font, String.valueOf(numero), 0, 2.5f - 1f, largura, 2f, Align.center, 0.07f * pulso, Ui.AMARELO);
-        Ui.texto(batch, font, "Mantenha o membro relaxado e olhe para a pista", 0, 1.0f, largura, Align.center, 0.0135f, Ui.MUTED, false);
+        Ui.texto(batch, font, "Mantenha-se parado e olhe para a pista", 0, 1.0f, largura, Align.center, 0.0135f, Ui.MUTED, false);
     }
 }

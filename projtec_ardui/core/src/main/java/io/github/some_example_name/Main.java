@@ -19,7 +19,7 @@ public class Main implements ApplicationListener {
     private enum Estado {
         MENU,
         CALIBRANDO,
-        SELECAO_MODO,
+        SELECAO_DURACAO,
         PREPARACAO,
         PAUSA,
         JOGANDO,
@@ -52,13 +52,11 @@ public class Main implements ApplicationListener {
 
     private SensorClient sensorClient;
     private TelaCalibracao telaCalibracao;
-    private TelaSelecaoModo telaSelecaoModo;
+    private TelaSelecaoDuracao telaSelecaoDuracao;
     private TelaPreparacao telaPreparacao;
     private TelaPausa telaPausa;
     private TelaResultados telaResultados;
     private boolean recalibrandoDaPausa;
-    private int modoPartida = TelaSelecaoModo.NENHUM;
-    private String nomeModoPartida = "";
     private int duracaoPartida = 60;
     private float tempoRestante;
     private int fase = 1;
@@ -99,7 +97,7 @@ public class Main implements ApplicationListener {
 
         sensorClient = sensorBaseUrl == null ? new SensorClient() : new SensorClient(sensorBaseUrl);
         telaCalibracao = new TelaCalibracao(viewport, font, uiAssets, sensorClient);
-        telaSelecaoModo = new TelaSelecaoModo(viewport, font, uiAssets);
+        telaSelecaoDuracao = new TelaSelecaoDuracao(viewport, font, uiAssets);
         telaPreparacao = new TelaPreparacao(viewport, font, uiAssets, sensorClient);
         telaPausa = new TelaPausa(viewport, font, uiAssets);
         telaResultados = new TelaResultados(viewport, font, uiAssets);
@@ -139,19 +137,16 @@ public class Main implements ApplicationListener {
             return;
         }
 
-        if (estadoAtual == Estado.SELECAO_MODO) {
-            telaSelecaoModo.input();
-            if (telaSelecaoModo.isVoltarSolicitado()) {
+        if (estadoAtual == Estado.SELECAO_DURACAO) {
+            telaSelecaoDuracao.input();
+            if (telaSelecaoDuracao.isVoltarSolicitado()) {
                 estadoAtual = Estado.MENU;
-                telaSelecaoModo.fechar();
-            } else if (telaSelecaoModo.isSelecionarSolicitado()) {
-                Gdx.app.log("RehabCar", "Modo escolhido: " + telaSelecaoModo.getNomeModo());
-                modoPartida = telaSelecaoModo.getModoEscolhido();
-                nomeModoPartida = telaSelecaoModo.getNomeModo();
-                duracaoPartida = telaSelecaoModo.getDuracaoSegundos();
-                telaPreparacao.abrir(modoPartida, nomeModoPartida, duracaoPartida);
+                telaSelecaoDuracao.fechar();
+            } else if (telaSelecaoDuracao.isSelecionarSolicitado()) {
+                duracaoPartida = telaSelecaoDuracao.getDuracaoSegundos();
+                telaPreparacao.abrir(duracaoPartida);
                 estadoAtual = Estado.PREPARACAO;
-                telaSelecaoModo.fechar();
+                telaSelecaoDuracao.fechar();
             }
             return;
         }
@@ -159,8 +154,8 @@ public class Main implements ApplicationListener {
         if (estadoAtual == Estado.PREPARACAO) {
             telaPreparacao.input();
             if (telaPreparacao.isVoltarSolicitado()) {
-                telaSelecaoModo.abrir();
-                estadoAtual = Estado.SELECAO_MODO;
+                telaSelecaoDuracao.abrir();
+                estadoAtual = Estado.SELECAO_DURACAO;
                 telaPreparacao.fechar();
             }
             return;
@@ -207,7 +202,7 @@ public class Main implements ApplicationListener {
             telaResultados.input();
             if (telaResultados.isJogarNovamenteSolicitado()) {
                 // mesmo modo e mesma duracao, passando pela contagem 3, 2, 1
-                telaPreparacao.abrir(modoPartida, nomeModoPartida, duracaoPartida);
+                telaPreparacao.abrir(duracaoPartida);
                 estadoAtual = Estado.PREPARACAO;
                 telaResultados.fechar();
             } else if (telaResultados.isMenuSolicitado()) {
@@ -220,8 +215,8 @@ public class Main implements ApplicationListener {
         if (Gdx.input.justTouched()) {
             if (botaoJogar.foiClicado(touchPos.x, touchPos.y)) {
                 Gdx.app.log("RehabCar", "Jogar");
-                telaSelecaoModo.abrir();
-                estadoAtual = Estado.SELECAO_MODO;
+                telaSelecaoDuracao.abrir();
+                estadoAtual = Estado.SELECAO_DURACAO;
                 return;
             }
             if (botaoCalibrar.foiClicado(touchPos.x, touchPos.y)) {
@@ -255,7 +250,7 @@ public class Main implements ApplicationListener {
 
     private void encerrarPartida(String motivo) {
         motivoFim = motivo;
-        telaResultados.abrir(motivoFim, nomeModoPartida, duracaoPartida, calcularPontos(),
+        telaResultados.abrir(motivoFim, duracaoPartida, calcularPontos(),
                 pista.getMoedas(), pista.getMoedasPerdidas(), pista.getBatidas(), MAX_BATIDAS,
                 fase, FASES, duracaoPartida - tempoRestante);
         estadoAtual = Estado.RESULTADOS;
@@ -369,8 +364,8 @@ public class Main implements ApplicationListener {
             return;
         }
 
-        if (estadoAtual == Estado.SELECAO_MODO) {
-            telaSelecaoModo.draw(spriteBatch);
+        if (estadoAtual == Estado.SELECAO_DURACAO) {
+            telaSelecaoDuracao.draw(spriteBatch);
             return;
         }
 

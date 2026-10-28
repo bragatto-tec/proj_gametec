@@ -12,7 +12,6 @@ import java.util.Map;
 public final class UiAssets implements Disposable {
     private final String language;
     private final Map<String, Texture[]> buttons = new HashMap<String, Texture[]>();
-    private final Map<String, Texture[]> cards = new HashMap<String, Texture[]>();
     private final Texture whitePixel;
 
     public UiAssets(String language) {
@@ -34,15 +33,6 @@ public final class UiAssets implements Disposable {
             buttons.put(name, textures);
         }
         return textures[state];
-    }
-
-    public Texture card(String name, boolean selected) {
-        Texture[] textures = cards.get(name);
-        if (textures == null) {
-            textures = loadSet(name, new String[]{"normal", "selecionado"}, "cards");
-            cards.put(name, textures);
-        }
-        return textures[selected ? 1 : 0];
     }
 
     public Texture whitePixel() { return whitePixel; }
@@ -70,7 +60,6 @@ public final class UiAssets implements Disposable {
     @Override
     public void dispose() {
         for (Texture[] set : buttons.values()) for (Texture texture : set) texture.dispose();
-        for (Texture[] set : cards.values()) for (Texture texture : set) texture.dispose();
         whitePixel.dispose();
     }
 }

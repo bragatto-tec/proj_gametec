@@ -19,7 +19,6 @@ public class TelaResultados {
     private final Button botaoMenu;
 
     private String motivo = "";
-    private String nomeModo = "";
     private int duracaoSegundos;
     private int pontos;
     private int moedas;
@@ -44,10 +43,9 @@ public class TelaResultados {
         this.botaoMenu = new Button(uiAssets, "voltar_ao_menu", 4.2f, 0.25f, 3.0f, 0.6f);
     }
 
-    public void abrir(String motivo, String nomeModo, int duracaoSegundos, int pontos, int moedas,
+    public void abrir(String motivo, int duracaoSegundos, int pontos, int moedas,
                       int moedasPerdidas, int batidas, int maxBatidas, int fase, int fases, float tempoJogado) {
         this.motivo = motivo;
-        this.nomeModo = nomeModo;
         this.duracaoSegundos = duracaoSegundos;
         this.pontos = pontos;
         this.moedas = moedas;
@@ -121,7 +119,7 @@ public class TelaResultados {
         batch.begin();
         Ui.fundo(batch, largura, viewport.getWorldHeight());
         Ui.texto(batch, font, "FIM DE PARTIDA", 0, 4.85f, largura, Align.center, 0.025f, Color.WHITE, false);
-        Ui.texto(batch, font, motivo + "  -  Modo " + nomeModo + ", " + (duracaoSegundos / 60) + " min",
+        Ui.texto(batch, font, motivo + "  -  Modo Horizontal, " + (duracaoSegundos / 60) + " min",
                 0, 4.25f, largura, Align.center, 0.0150f, Ui.MUTED, false);
 
         Ui.painel(batch, Ui.Estilo.AZUL, 0.5f, 1.1f, 3.3f, 2.6f);

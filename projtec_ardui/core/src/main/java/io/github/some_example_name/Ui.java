@@ -39,7 +39,7 @@ public final class Ui {
     private static final List<Texture> texturas = new ArrayList<>();
     private static NinePatch pNeutro, pVerde, pVermelho, pAzul, pilulaNeutra, pilulaAmarela, barraFundo, barraFill;
     private static Texture fundo, led, anel, pixel, cone, moeda;
-    private static Texture[] iconesModo;
+    private static Texture iconeModo;
     private static TextureRegion moedaIcone;
 
     private Ui() {
@@ -98,8 +98,7 @@ public final class Ui {
         cone = tex("cone.png");
         moeda = tex("moeda.png");
         moedaIcone = new TextureRegion(moeda, 0, 0, 16, 16);
-        iconesModo = new Texture[] {
-                tex("ui/icone_modo_vertical.png"), tex("ui/icone_modo_horizontal.png"), tex("ui/icone_modo_combinado.png") };
+        iconeModo = tex("ui/icone_modo_horizontal.png");
 
         Pixmap pm = new Pixmap(1, 1, Pixmap.Format.RGBA8888);
         pm.setColor(Color.WHITE);
@@ -164,9 +163,8 @@ public final class Ui {
         b.setColor(Color.WHITE);
     }
 
-    public static Texture iconeModo(int modo) {
-        int i = modo == TelaSelecaoModo.HORIZONTAL ? 1 : modo == TelaSelecaoModo.COMBINADO ? 2 : 0;
-        return iconesModo[i];
+    public static Texture iconeModo() {
+        return iconeModo;
     }
 
     public static Texture cone() {
