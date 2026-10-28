@@ -1,3 +1,5 @@
+<img width="643" height="506" alt="fig1_jogo" src="https://github.com/user-attachments/assets/dc692e61-719c-4b9a-9f97-71c7c63f4a84" />
+
 # 🚗 RehabCar
 
 **Jogo sério de reabilitação de tornozelo com ESP32 e libGDX**
@@ -40,7 +42,8 @@ A gamificação oferece ao exercício elementos que o tornam mais atrativo e men
 
 O jogador vê a pista pela traseira de um carro, o personagem principal. O carro ocupa uma de três vias (esquerda, centro ou direita). Moedas e cones descem pela pista em perspectiva: as **moedas** devem ser coletadas e os **cones**, evitados. O jogador troca de via inclinando o pé para um lado ou para o outro.
 
-📸 *[COMPLETAR: Figura 1, tela de jogo]*
+📸 Visão Geral <img width="643" height="506" alt="fig1_jogo" src="https://github.com/user-attachments/assets/0bf05c2e-bc09-47ed-b123-54cb0531f1c2" />
+
 
 ### 🔌 3.2 Integração com o dispositivo IoT
 
@@ -55,7 +58,8 @@ O jogador vê a pista pela traseira de um carro, o personagem principal. O carro
 
 Antes de jogar, o jogador apoia o sensor em posição neutra e o mantém imóvel enquanto uma barra de progresso é preenchida. A tela mostra o estado da conexão com o ESP32 e da leitura do MPU6050, um indicador de nivelamento com um ponto que se move conforme a inclinação, e os valores lidos. A calibração pode ser refeita pela tela de pausa.
 
-📸 *[COMPLETAR: Figura 2, tela de calibração]*
+📸 Tela de Calibração<img width="642" height="511" alt="fig2_calibracao" src="https://github.com/user-attachments/assets/85dbfe59-b043-469e-a5c7-e6586f32697e" />
+
 
 ### 🗺️ 3.4 Fluxo de telas
 
@@ -69,9 +73,18 @@ Antes de jogar, o jogador apoia o sensor em posição neutra e o mantém imóvel
 | ⏸️ Pausa | Continuar, reiniciar partida, recalibrar sensor e voltar ao menu (com confirmação) |
 | 🏁 Resultados | Pontuação, recorde da sessão e desempenho da partida |
 
-📸 *[COMPLETAR: Figuras 3 a 6, telas de menu, duração, preparação e pausa]*
+📸 Figura 3 (MENU) <img width="641" height="511" alt="fig3_menu" src="https://github.com/user-attachments/assets/de72ad61-91c2-4cd6-8623-7eed207632b1" />
+📸 Figura 4 (DURAÇÃO) <img width="642" height="515" alt="fig4_duracao" src="https://github.com/user-attachments/assets/8099044b-2e70-49d8-a81a-1b5481b8af99" />
+📸 Figura 5 (PREPARAÇÃO) <img width="644" height="517" alt="fig5_preparacao" src="https://github.com/user-attachments/assets/f9291b4e-eabb-4ac7-8a95-a1679a39a839" />
+📸 Figura 6 (PAUSA) <img width="641" height="513" alt="fig6_pausa" src="https://github.com/user-attachments/assets/a01e7804-8a32-4c37-aef7-5326864feee5" />
+
+
+
+
+
 
 ### ⚙️ 3.5 Mecânicas e regras
+<img width="640" height="509" alt="fig7_resultados" src="https://github.com/user-attachments/assets/3a6a2e60-bf85-479c-8995-cc5c5c737c3f" />
 
 - 🪙 **Objetivo:** coletar o máximo de moedas e evitar os cones até o fim do tempo escolhido.
 - ❤️ **Vidas:** a partida termina quando o jogador **bate três vezes** nos cones ou quando o **tempo acaba**.
@@ -100,7 +113,8 @@ A pontuação combina o desempenho do jogador e o indicador derivado do sensor:
 
 A tela de resultados mostra a pontuação com a soma de cada parte, o melhor resultado da sessão, as moedas coletadas de quantas apareceram, as batidas, o aproveitamento, a fase alcançada, o tempo jogado e a **maior inclinação atingida para a esquerda e para a direita**. Esses dados permitem comparar partidas e acompanhar a evolução do jogador.
 
-📸 *[COMPLETAR: Figura 7, tela de resultados]*
+📸 Figura 7 <img width="640" height="509" alt="fig7_resultados" src="https://github.com/user-attachments/assets/edb5726a-a30d-4219-b80c-32cb0c0e25fb" />
+
 
 ### 🕹️ 3.8 Como jogar
 
