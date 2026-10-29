@@ -146,9 +146,8 @@ public class Main implements ApplicationListener {
                 restaurarConexaoAntesDaConfiguracaoWifi();
                 estadoAtual = Estado.MENU;
             } else if (telaConfiguracaoWifi.isConexaoWifiSolicitada()) {
-                String enderecoWifi = telaConfiguracaoWifi.getEnderecoWifi();
                 telaConfiguracaoWifi.fechar();
-                conectarViaWifi(enderecoWifi);
+                conectarViaWifi();
                 estadoAtual = Estado.MENU;
             }
             return;
@@ -341,10 +340,10 @@ public class Main implements ApplicationListener {
         }
     }
 
-    private void conectarViaWifi(String enderecoWifi) {
+    private void conectarViaWifi() {
         sensorClient.parar();
         telaCalibracao.dispose();
-        sensorClient = criarClienteWifi(enderecoWifi);
+        sensorClient = criarClienteWifi();
         telaCalibracao = new TelaCalibracao(viewport, font, uiAssets, sensorClient);
         telaPreparacao = new TelaPreparacao(viewport, font, uiAssets, sensorClient);
         modoWifiSelecionado = true;
@@ -371,12 +370,7 @@ public class Main implements ApplicationListener {
     }
 
     private SensorClient criarClienteWifi() {
-        return criarClienteWifi(null);
-    }
-
-    private SensorClient criarClienteWifi(String enderecoWifi) {
-        String endereco = enderecoWifi == null || enderecoWifi.trim().isEmpty()
-                ? sensorBaseUrl : enderecoWifi.trim();
+        String endereco = sensorBaseUrl;
         if (endereco == null || endereco.trim().isEmpty()) {
             return new SensorClient();
         }

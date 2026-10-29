@@ -18,7 +18,6 @@ public class TelaConfiguracaoWifi {
     private final Vector2 touchPos = new Vector2();
     private String ssid = "";
     private String senha = "";
-    private String enderecoWifi = "";
     private int campoEditando;
     private boolean voltarSolicitado;
     private boolean conexaoWifiSolicitada;
@@ -45,8 +44,6 @@ public class TelaConfiguracaoWifi {
         conexaoWifiSolicitada = false;
     }
 
-    public String getEnderecoWifi() { return enderecoWifi.trim(); }
-
     public void input() {
         touchPos.set(Gdx.input.getX(), Gdx.input.getY());
         viewport.unproject(touchPos);
@@ -70,8 +67,6 @@ public class TelaConfiguracaoWifi {
             campoEditando = 0;
         } else if (y >= 2.35f && y < 3.0f) {
             campoEditando = 1;
-        } else if (y >= 1.45f && y < 2.1f) {
-            campoEditando = 2;
         } else if (x >= 4.2f && y >= 0.2f && y <= 0.9f) {
             if (pedidoWifi == null && !conexaoWifiSolicitada) {
                 if (resultadoPronto && resultadoOk) {
@@ -89,11 +84,11 @@ public class TelaConfiguracaoWifi {
 
     private void processarTeclado() {
         String valor = valorCampo();
-        int limite = campoEditando == 1 ? 63 : campoEditando == 2 ? 64 : 32;
+        int limite = campoEditando == 1 ? 63 : 32;
         if (Gdx.input.isKeyJustPressed(Input.Keys.BACKSPACE) && !valor.isEmpty()) {
             valor = valor.substring(0, valor.length() - 1);
         } else if (Gdx.input.isKeyJustPressed(Input.Keys.ENTER) || Gdx.input.isKeyJustPressed(Input.Keys.TAB)) {
-            campoEditando = (campoEditando + 1) % 3;
+            campoEditando = (campoEditando + 1) % 2;
             return;
         } else if (valor.length() < limite) {
             boolean shift = Gdx.input.isKeyPressed(Input.Keys.SHIFT_LEFT) || Gdx.input.isKeyPressed(Input.Keys.SHIFT_RIGHT);
@@ -128,12 +123,11 @@ public class TelaConfiguracaoWifi {
     }
 
     private String valorCampo() {
-        return campoEditando == 1 ? senha : campoEditando == 2 ? enderecoWifi : ssid;
+        return campoEditando == 1 ? senha : ssid;
     }
 
     private void definirValorCampo(String valor) {
         if (campoEditando == 1) senha = valor;
-        else if (campoEditando == 2) enderecoWifi = valor;
         else ssid = valor;
     }
 
@@ -147,16 +141,13 @@ public class TelaConfiguracaoWifi {
         batch.begin();
         Ui.fundo(batch, largura, viewport.getWorldHeight());
         Ui.texto(batch, font, "CONFIGURAR WI-FI", 0, 4.85f, largura, Align.center, 0.023f, Color.WHITE, false);
-        Ui.texto(batch, font, "Use o mesmo Wi-Fi. Se necessário, informe o IP do ESP32.", 0, 4.35f, largura, Align.center, 0.014f, Ui.MUTED, false);
+        Ui.texto(batch, font, "Informe a rede Wi-Fi para o ESP32.", 0, 4.35f, largura, Align.center, 0.014f, Ui.MUTED, false);
         Ui.painel(batch, Ui.Estilo.NEUTRO, 1.0f, 3.25f, 6.0f, 0.65f);
         Ui.painel(batch, Ui.Estilo.NEUTRO, 1.0f, 2.35f, 6.0f, 0.65f);
-        Ui.painel(batch, Ui.Estilo.NEUTRO, 1.0f, 1.45f, 6.0f, 0.65f);
         Ui.texto(batch, font, campoEditando == 0 ? "REDE (SSID)  •  EDITANDO" : "REDE (SSID)", 1.2f, 3.8f, 5.6f, Align.left, 0.011f, campoEditando == 0 ? Ui.AZUL : Ui.MUTED, false);
         Ui.texto(batch, font, ssid.isEmpty() ? "Digite o nome da rede" : ssid, 1.2f, 3.52f, 5.6f, Align.left, 0.015f, Color.WHITE, false);
         Ui.texto(batch, font, campoEditando == 1 ? "SENHA  •  EDITANDO" : "SENHA", 1.2f, 2.9f, 5.6f, Align.left, 0.011f, campoEditando == 1 ? Ui.AZUL : Ui.MUTED, false);
         Ui.texto(batch, font, senha.isEmpty() ? "Digite a senha" : mascararSenha(), 1.2f, 2.62f, 5.6f, Align.left, 0.015f, Color.WHITE, false);
-        Ui.texto(batch, font, campoEditando == 2 ? "IP / ENDEREÇO DO ESP32  •  EDITANDO" : "IP / ENDEREÇO DO ESP32 (opcional)", 1.2f, 2.0f, 5.6f, Align.left, 0.011f, campoEditando == 2 ? Ui.AZUL : Ui.MUTED, false);
-        Ui.texto(batch, font, enderecoWifi.isEmpty() ? "Ex.: 192.168.1.50" : enderecoWifi, 1.2f, 1.72f, 5.6f, Align.left, 0.015f, Color.WHITE, false);
         String status = sensorClient.getStatusWifi();
         if (status == null || status.isEmpty()) status = "Aguardando envio das credenciais.";
         Ui.Estilo estiloStatus = pedidoWifi != null ? Ui.Estilo.AZUL
