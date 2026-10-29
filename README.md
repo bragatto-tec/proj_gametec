@@ -164,8 +164,6 @@ A partida é dividida em **três fases de igual duração** (cada uma é um ter�
 
 Da fase 1 para a 3 os itens chegam mais rápido, em maior quantidade e com mais cones, o que exige mudanças de via mais rápidas e frequentes.
 
-> ⚠️ **[COMPLETAR]** Informar se os valores foram ajustados após testes com o sensor.
-
 ### 🏆 3.7 Pontuação e métricas
 
 A pontuação combina o desempenho do jogador e o indicador derivado do sensor:
