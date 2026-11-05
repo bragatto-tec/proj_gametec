@@ -31,7 +31,9 @@
    - [3.7 Pontuação e métricas](#-37-pontuação-e-métricas)
    - [3.8 Como jogar](#️-38-como-jogar)
    - [3.9 Tecnologias e organização técnica](#️-39-tecnologias-e-organização-técnica)
-5. [Limitações e finalidade clínica](#-4-limitações-e-finalidade-clínica)
+5. [Protocolos proprioceptivos e biofeedback](#-4-protocolos-proprioceptivos-e-biofeedback)
+6. [Limitações e finalidade clínica](#-5-limitações-e-finalidade-clínica)
+7. [Referências e fontes consultadas](#-6-referências-e-fontes-consultadas)
 
 ---
 
@@ -228,7 +230,55 @@ Os valores angulares exibidos pelo jogo devem ser identificados como **inclinaç
 
 ---
 
-## ⚕️ 4. Limitações e finalidade clínica
+## 🧠 4. Protocolos proprioceptivos e biofeedback
+
+### 4.1 Evidências sobre treinamento proprioceptivo
+
+O treinamento proprioceptivo e os exercícios de equilíbrio são componentes importantes da reabilitação após entorse lateral do tornozelo e no manejo da instabilidade crônica. Revisões sistemáticas e ensaios clínicos apontam benefícios para o equilíbrio, a função e a redução de recorrências, especialmente em populações esportivas. Os resultados, entretanto, dependem da população, do histórico de lesão e das características do programa.
+
+Um ensaio clínico randomizado de Hupperets et al. (2009), com 522 atletas acompanhados por um ano, avaliou um programa domiciliar de treinamento proprioceptivo de oito semanas associado ao cuidado habitual. Foram relatadas recorrências por 22% dos participantes do grupo de intervenção e por 33% do grupo controle, correspondendo a uma redução relativa de risco de 35% no estudo. Esses números dizem respeito à população e ao protocolo avaliados e não devem ser generalizados automaticamente para todos os pacientes.
+
+Uma metanálise publicada em 2024, com 20 estudos e 682 participantes com instabilidade crônica do tornozelo, encontrou benefícios do treinamento de equilíbrio para função e equilíbrio dinâmico. Nas análises de subgrupos, programas com sessões de 20 a 30 minutos, três vezes por semana, durante quatro a seis semanas apresentaram resultados favoráveis. Essa faixa é uma referência encontrada na literatura, não uma prescrição universal.
+
+### 4.2 Exercícios utilizados em programas proprioceptivos
+
+Os protocolos descritos na literatura incluem combinações progressivas de tarefas como:
+
+- **Apoio unipodal:** manter o equilíbrio sobre um pé, inicialmente em superfície estável e com os olhos abertos.
+- **Transferência de peso:** deslocar o peso corporal em diferentes direções mantendo o controle postural.
+- **Alcances multidirecionais:** tocar pontos à frente, atrás e nas diagonais sem perder o equilíbrio, como em tarefas inspiradas no Star Excursion Balance Test.
+- **Superfícies instáveis:** realizar tarefas de equilíbrio em prancha proprioceptiva ou equipamento equivalente, quando apropriado.
+- **Tarefas funcionais progressivas:** incluir mudanças de direção, aterrissagens e atividades específicas da rotina ou do esporte, somente quando houver liberação profissional.
+
+A dificuldade deve progredir conforme a capacidade de execução e o controle do participante. A seleção dos exercícios, amplitude, duração, frequência e critérios de progressão cabe ao fisioterapeuta.
+
+### 4.3 Biofeedback visual e sensores vestíveis
+
+O biofeedback pode apresentar informações sobre o movimento durante a tarefa, ajudando o participante a compreender a relação entre a ação realizada e o resultado observado. Sensores vestíveis, como unidades de medição inercial (IMU), têm sido estudados para registrar orientação e movimento em contextos de avaliação e reabilitação musculoesquelética.
+
+Um ensaio clínico randomizado publicado em 2026 investigou a adição de retreinamento da marcha com feedback visual a um programa de treinamento de resistência e equilíbrio em pessoas com instabilidade crônica do tornozelo. O estudo avaliou variáveis cinemáticas, centro de pressão e propriocepção. Os resultados são promissores para desfechos biomecânicos e proprioceptivos, mas não demonstram, por si só, que o biofeedback previna novas entorses em longo prazo.
+
+Assim, a evidência para exercícios proprioceptivos e de equilíbrio na reabilitação é mais estabelecida do que a evidência para um dispositivo eletrônico específico ou para um protocolo de biofeedback padronizado. O biofeedback deve ser entendido como recurso complementar, e não como substituto do treinamento terapêutico supervisionado.
+
+### 4.4 Aplicação possível no RehabCar
+
+Considerando a arquitetura atual do RehabCar — ESP32, MPU6050 e aplicação Java/libGDX — o projeto pode explorar o feedback visual em exercícios ativos de inversão e eversão. A proposta abaixo é uma possibilidade de desenvolvimento e avaliação do protótipo; não corresponde a um protocolo clínico validado.
+
+| Etapa proposta | Atividade no sistema | Informação que pode ser registrada |
+|---|---|---|
+| 1. Calibração | Estabelecer a posição neutra do sensor antes da sessão. | Referência inicial de orientação. |
+| 2. Mobilidade controlada | Executar movimentos de inversão e eversão dentro da faixa orientada pelo fisioterapeuta. | Inclinação estimada e número de repetições. |
+| 3. Alvos visuais | Tentar alcançar uma faixa ou alvo exibido na tela. | Diferença entre o alvo e a inclinação estimada. |
+| 4. Controle do movimento | Repetir movimentos de forma controlada, evitando priorizar apenas velocidade. | Consistência e tempo de execução. |
+| 5. Acompanhamento | Comparar sessões realizadas em condições semelhantes e, quando indicado, registros de cada pé. | Histórico de inclinação estimada por sessão e por lado. |
+
+**Limites de medição:** o MPU6050 fixado ao pé registra dados inerciais e permite estimar a orientação do sensor. Essa medida não corresponde diretamente à amplitude articular medida por goniometria, à força muscular, ao centro de pressão ou ao equilíbrio corporal. Para medir esses outros parâmetros seriam necessários instrumentos e métodos específicos.
+
+O jogo atual, que controla um carro em três vias por meio da inclinação do pé, não reproduz por si só exercícios de equilíbrio em apoio unipodal, tarefas em superfície instável ou retreinamento da marcha. Esses exercícios podem integrar um programa conduzido pelo fisioterapeuta, enquanto o RehabCar atua como ferramenta complementar de mobilidade, feedback e registro.
+
+---
+
+## ⚕️ 5. Limitações e finalidade clínica
 
 O RehabCar é um protótipo de tecnologia voltado ao apoio de exercícios ativos de inversão e eversão do pé, no contexto da reabilitação do tornozelo. Sua utilização é considerada para uma etapa posterior à fase aguda e à imobilização, mediante liberação e orientação do fisioterapeuta.
 
@@ -241,3 +291,65 @@ Os valores de referência angular eventualmente apresentados no jogo servem como
 O dispositivo pode ser utilizado alternadamente nos dois pés para registrar os movimentos de cada membro. Essa funcionalidade permite uma comparação observacional entre os registros, mas não substitui avaliações clínicas específicas nem representa uma medição bilateral simultânea.
 
 **O RehabCar é uma ferramenta complementar de interação, feedback visual e registro de desempenho. Não substitui a avaliação fisioterapêutica, a goniometria, o tratamento convencional ou a conduta de um profissional habilitado.**
+
+---
+
+## 📚 6. Referências e fontes consultadas
+
+As informações utilizadas na contextualização da reabilitação do tornozelo, na justificativa dos exercícios e nas limitações de uso do RehabCar foram complementadas por diretrizes clínicas, revisões científicas e fontes institucionais. Essas referências fundamentam o uso de exercícios terapêuticos como parte da reabilitação, mas **não validam clinicamente o protótipo RehabCar**, seu sensor ou os valores angulares apresentados pelo jogo.
+
+### 6.1 Consulta cadastral profissional – CREFITO-3
+
+Também foi realizada consulta ao serviço oficial de consulta de profissionais do Conselho Regional de Fisioterapia e Terapia Ocupacional da 3ª Região (CREFITO-3):
+
+- **Profissional exibido no resultado:** Mauricio Suner Gimenez.
+- **Profissão:** Fisioterapeuta.
+- **Registro informado:** CREFITO-3 nº 54838-F.
+- **Situação apresentada na consulta:** exercício profissional ativo / profissional habilitado(a).
+- **Localização informada:** São Paulo – SP.
+- **Fonte:** [CREFITO-3 – Consulta de profissionais](https://www.crefito3.org.br/dsn/consultapf/detalhes.asp?tb=ni).
+
+*Observação: os dados acima reproduzem o resultado apresentado na captura de tela fornecida para esta documentação. A consulta cadastral serve para registrar a verificação do profissional no conselho regional; não representa avaliação, aprovação ou validação técnica/científica do RehabCar.*
+
+### 6.2 Artigos e diretrizes científicas
+
+1. **MARTIN, RobRoy L. et al.** Ankle Stability and Movement Coordination Impairments: Lateral Ankle Ligament Sprains Revision 2021. *Journal of Orthopaedic & Sports Physical Therapy*, v. 51, n. 4, p. CPG1–CPG80, 2021. DOI: [10.2519/jospt.2021.0302](https://doi.org/10.2519/jospt.2021.0302). Disponível também em: [PubMed](https://pubmed.ncbi.nlm.nih.gov/33789434/).
+   - **Contribuição para o trabalho:** diretriz de prática clínica sobre avaliação e manejo de entorse lateral e instabilidade crônica do tornozelo. Apresenta recomendações para exercícios terapêuticos, amplitude de movimento ativa protegida, treinamento neuromuscular, equilíbrio e propriocepção. A diretriz também ressalta que jogos e ambientes virtuais podem ter efeitos variados e, quando utilizados, devem atuar como recurso complementar.
+
+2. **WAGEMANS, Jente et al.** Exercise-based rehabilitation reduces reinjury following acute lateral ankle sprain: A systematic review update with meta-analysis. *PLOS ONE*, v. 17, n. 2, e0262023, 2022. DOI: [10.1371/journal.pone.0262023](https://doi.org/10.1371/journal.pone.0262023). Disponível em: [PubMed](https://pubmed.ncbi.nlm.nih.gov/35134061/) | [Texto completo](https://pmc.ncbi.nlm.nih.gov/articles/PMC8824326/).
+   - **Contribuição para o trabalho:** revisão sistemática com metanálise que investigou programas de reabilitação baseados em exercícios após entorse aguda do tornozelo. Os resultados apontaram redução da prevalência de novas entorses em 12 meses no grupo submetido a exercícios, embora os autores indiquem limitações e não estabeleçam um conteúdo ou volume ideal de treinamento.
+
+3. **VASCONCELOS, Gabriela Souza de et al.** Effects of proprioceptive training on the incidence of ankle sprain in athletes: systematic review and meta-analysis. *Clinical Rehabilitation*, v. 32, n. 12, p. 1581–1590, 2018. DOI: [10.1177/0269215518788683](https://doi.org/10.1177/0269215518788683). Disponível em: [PubMed](https://pubmed.ncbi.nlm.nih.gov/29996668/).
+   - **Contribuição para o trabalho:** revisão sistemática e metanálise sobre treinamento proprioceptivo e equilíbrio. O estudo encontrou redução na incidência de entorses entre atletas que realizaram treinamento de equilíbrio, oferecendo suporte à discussão sobre controle neuromuscular e propriocepção. Os resultados são específicos da população estudada e não devem ser generalizados automaticamente para todos os pacientes.
+
+### 6.3 Treinamento proprioceptivo, equilíbrio e biofeedback
+
+4. **HUPPERETS, Maarten D. W.; VERHAGEN, Evert A. L. M.; VAN MECHELEN, Willem.** Effect of unsupervised home based proprioceptive training on recurrences of ankle sprain: randomised controlled trial. *BMJ*, v. 339, b2684, 2009. DOI: [10.1136/bmj.b2684](https://doi.org/10.1136/bmj.b2684). Disponível em: [BMJ – texto completo](https://www.bmj.com/content/339/bmj.b2684.long).
+   - **Contribuição para o trabalho:** ensaio clínico randomizado com 522 atletas e acompanhamento de um ano. O programa proprioceptivo domiciliar de oito semanas foi associado a menor proporção de recorrências autorrelatadas no grupo de intervenção (22%) em comparação ao controle (33%).
+
+5. **TANG, Fang et al.** Meta-analysis of the dosage of balance training on ankle function and dynamic balance ability in patients with chronic ankle instability. *BMC Musculoskeletal Disorders*, v. 25, art. 689, 2024. DOI: [10.1186/s12891-024-07800-8](https://doi.org/10.1186/s12891-024-07800-8). Disponível em: [PubMed](https://pubmed.ncbi.nlm.nih.gov/39217316/) | [Texto completo](https://pmc.ncbi.nlm.nih.gov/articles/PMC11365157/).
+   - **Contribuição para o trabalho:** metanálise de 20 estudos com 682 participantes com instabilidade crônica do tornozelo. Encontrou benefícios do treinamento de equilíbrio para função e equilíbrio dinâmico; as análises de subgrupos apontaram resultados favoráveis com sessões de 20–30 minutos, três vezes por semana, por quatro a seis semanas.
+
+6. **ABBASI, Alireza; SHOJAEDIN, Seyed Sadredin; HOSSEINI, Seyed Mohammad.** Effects of adding gait retraining with visual feedback to resistance-balance training on kinematics, centers of pressure, and proprioception in individuals with chronic ankle instability: a randomized controlled trial. *BMC Sports Science, Medicine and Rehabilitation*, 2026. DOI: [10.1186/s13102-026-02061-5](https://doi.org/10.1186/s13102-026-02061-5). Disponível em: [Texto do artigo](https://link.springer.com/article/10.1186/s13102-026-02061-5).
+   - **Contribuição para o trabalho:** ensaio randomizado com 45 participantes com instabilidade crônica do tornozelo, que investigou retreinamento da marcha com feedback visual associado ao treinamento de resistência e equilíbrio. Avaliou cinemática, centro de pressão e propriocepção. Não deve ser interpretado como comprovação de prevenção de recorrências em longo prazo.
+
+7. **BROGNARA, L. et al.** Wearable Technology Applications and Methods to Assess Clinical Outcomes in Foot and Ankle Disorders: Achievements and Perspectives. *Sensors*, v. 24, n. 21, 7059, 2024. DOI: [10.3390/s24217059](https://doi.org/10.3390/s24217059).
+   - **Contribuição para o trabalho:** revisão sobre aplicações de tecnologias vestíveis na avaliação de condições do pé e tornozelo. Contextualiza o potencial de sensores vestíveis e as limitações de validação e padronização das medidas.
+
+### 6.4 Legislação e normas profissionais
+
+8. **BRASIL.** Lei nº 6.316, de 17 de dezembro de 1975. Cria o Conselho Federal e os Conselhos Regionais de Fisioterapia e Terapia Ocupacional e dá outras providências. Disponível em: [Câmara dos Deputados – legislação](https://www2.camara.leg.br/legin/fed/lei/1970-1979/lei-6316-17-dezembro-1975-366429-normaatualizada-pl.html).
+   - **Contribuição para o trabalho:** referência legal sobre a criação e as atribuições de fiscalização do COFFITO e dos CREFITOs no âmbito do exercício profissional.
+
+9. **CONSELHO FEDERAL DE FISIOTERAPIA E TERAPIA OCUPACIONAL (COFFITO).** Resolução nº 424, de 8 de julho de 2013. Estabelece o Código de Ética e Deontologia da Fisioterapia. Disponível em: [COFFITO – Resolução nº 424/2013](https://www.coffito.gov.br/nsite/?p=3187).
+   - **Contribuição para o trabalho:** norma de referência sobre deveres éticos e responsabilidades profissionais do fisioterapeuta.
+
+### 6.5 Relação das fontes com o projeto
+
+- **Contexto da reabilitação e exercícios ativos:** Martin et al. (2021) e Wagemans et al. (2022).
+- **Propriocepção, equilíbrio e controle neuromuscular:** Martin et al. (2021) e Vasconcelos et al. (2018).
+- **Uso do jogo como recurso complementar e limites da tecnologia:** Martin et al. (2021), em conjunto com as limitações descritas neste documento.
+- **Consulta de habilitação profissional e contexto regulatório:** consulta cadastral do CREFITO-3, Lei nº 6.316/1975 e Resolução COFFITO nº 424/2013.
+
+**Nota metodológica:** o RehabCar é apresentado como protótipo acadêmico e ferramenta complementar. As referências científicas não permitem afirmar que o jogo, isoladamente, trate lesões, determine a recuperação funcional ou substitua avaliação e prescrição individualizadas por fisioterapeuta.
+
